@@ -1,4 +1,4 @@
-"use client"; 
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 
@@ -180,8 +180,7 @@ export default function Home() {
       setImage(file);
       setImageBase64(base64);
 
-      const newSessionId =
-        crypto.randomUUID();
+      const newSessionId = crypto.randomUUID();
 
       setUploadSessionId(newSessionId);
 
@@ -331,7 +330,6 @@ export default function Home() {
             image: imageBase64,
             mimeType: image.type,
             tone: selectedTone,
-
             uploadSessionId,
           }),
         }
@@ -470,7 +468,6 @@ export default function Home() {
 
   // ==========================================
   // SHARE MY REPLY
-  // +10 REPLIES FOR REFERRAL CLICK
   // ==========================================
 
   async function shareReply(
@@ -492,15 +489,14 @@ export default function Home() {
         )}&type=reply`;
 
       const shareText =
-        `I got this reply with ReplyAI:\n\n"${reply}"\n\nTry ReplyAI:\n${shareUrl}`;
+        `👀 One tap = 5 free replies for me. Do your thing 😎\n\n${shareUrl}`;
 
+      // Create beautiful image
+      // using the actual generated reply
       const imageFile =
-        await createShareCard({
-          title:
-            "My Reply from ReplyAI",
-          content: reply,
-          footer:
-            "Generated with ReplyAI",
+        await createReplyShareCard({
+          reply,
+          tone,
         });
 
       const canShareFiles =
@@ -516,27 +512,24 @@ export default function Home() {
       if (canShareFiles) {
         await navigator.share({
           files: [imageFile],
-          title:
-            "ReplyAI — My Reply",
+          title: "ReplyAI",
           text: shareText,
-          url: shareUrl,
         });
 
         setShareMessage(
-          "Shared! Your referral link is included."
+          "Shared successfully!"
         );
       } else if (
         navigator.share
       ) {
         await navigator.share({
-          title:
-            "ReplyAI — My Reply",
+          title: "ReplyAI",
           text: shareText,
           url: shareUrl,
         });
 
         setShareMessage(
-          "Shared! Your referral link is included."
+          "Shared successfully!"
         );
       } else {
         await navigator.clipboard.writeText(
@@ -572,7 +565,6 @@ export default function Home() {
 
   // ==========================================
   // SHARE REPLYAI
-  // +5 REPLIES FOR REFERRAL CLICK
   // ==========================================
 
   async function shareReplyAI() {
@@ -591,17 +583,11 @@ export default function Home() {
         )}&type=site`;
 
       const shareText =
-        `Don't know what to reply? 😭\n\nUpload a screenshot to ReplyAI and get natural replies instantly.\n\nTry ReplyAI:\n${shareUrl}`;
+        `👀 One tap = 5 free replies for me. Do your thing 😎\n\n${shareUrl}`;
 
+      // Load the website promotional image
       const imageFile =
-        await createShareCard({
-          title:
-            "Try ReplyAI",
-          content:
-            "Don't know what to reply?\n\nUpload a screenshot and get natural replies instantly.",
-          footer:
-            "Try ReplyAI",
-        });
+        await loadPromoImage();
 
       const canShareFiles =
         typeof navigator !==
@@ -616,27 +602,24 @@ export default function Home() {
       if (canShareFiles) {
         await navigator.share({
           files: [imageFile],
-          title:
-            "Try ReplyAI",
+          title: "ReplyAI",
           text: shareText,
-          url: shareUrl,
         });
 
         setShareMessage(
-          "Shared! Your referral link is included."
+          "Shared successfully!"
         );
       } else if (
         navigator.share
       ) {
         await navigator.share({
-          title:
-            "Try ReplyAI",
+          title: "ReplyAI",
           text: shareText,
           url: shareUrl,
         });
 
         setShareMessage(
-          "Shared! Your referral link is included."
+          "Shared successfully!"
         );
       } else {
         await navigator.clipboard.writeText(
@@ -722,9 +705,7 @@ export default function Home() {
           replies in seconds.
         </p>
 
-        {/* ====================================
-            REPLY BALANCE
-        ==================================== */}
+        {/* REPLY BALANCE */}
 
         <div className="repliesCounter">
           <span className="counterIcon">
@@ -747,9 +728,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ====================================
-            SHARE REPLYAI
-        ==================================== */}
+        {/* SHARE REPLYAI */}
 
         <button
           type="button"
@@ -761,7 +740,7 @@ export default function Home() {
         >
           {sharing === "site"
             ? "Preparing share..."
-            : "📢 Share ReplyAI · +5 replies"}
+            : "📢 Share ReplyAI"}
         </button>
 
         {/* UPLOAD */}
@@ -934,8 +913,7 @@ export default function Home() {
                 sharing !== null
               }
             >
-              📢 Share ReplyAI ·
-              +5
+              📢 Share ReplyAI
             </button>
           </div>
         )}
@@ -1014,7 +992,7 @@ export default function Home() {
                         {sharing ===
                         `reply-${index}`
                           ? "Sharing..."
-                          : "↗ Share My Reply · +10"}
+                          : "↗ Share My Reply"}
                       </button>
                     </div>
                   </div>
@@ -1171,23 +1149,20 @@ export default function Home() {
    CREATE REFERRAL CODE
 ========================================== */
 
-async function createReferralCode(
-  type
-) {
-  const response =
-    await fetch(
-      "/api/referral/create",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-        body: JSON.stringify({
-          type,
-        }),
-      }
-    );
+async function createReferralCode(type) {
+  const response = await fetch(
+    "/api/referral/create",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+      body: JSON.stringify({
+        type,
+      }),
+    }
+  );
 
   const data =
     await response.json();
@@ -1205,13 +1180,47 @@ async function createReferralCode(
 }
 
 /* ==========================================
-   CREATE BEAUTIFUL SHARE CARD
+   LOAD WEBSITE PROMO IMAGE
 ========================================== */
 
-async function createShareCard({
-  title,
-  content,
-  footer,
+async function loadPromoImage() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const response = await fetch(
+    "/replyai-promo.png",
+    {
+      cache: "no-store",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      "Unable to load ReplyAI promo image."
+    );
+  }
+
+  const blob =
+    await response.blob();
+
+  return new File(
+    [blob],
+    "replyai-promo.png",
+    {
+      type:
+        blob.type || "image/png",
+    }
+  );
+}
+
+/* ==========================================
+   CREATE GENERATED REPLY SHARE CARD
+========================================== */
+
+async function createReplyShareCard({
+  reply,
+  tone,
 }) {
   if (
     typeof document ===
@@ -1225,8 +1234,10 @@ async function createShareCard({
       "canvas"
     );
 
-  canvas.width = 1200;
-  canvas.height = 630;
+  // Portrait format
+  // Perfect for WhatsApp / mobile
+  canvas.width = 1080;
+  canvas.height = 1350;
 
   const ctx =
     canvas.getContext("2d");
@@ -1235,23 +1246,31 @@ async function createShareCard({
     return null;
   }
 
-  // Background
+  // ==========================================
+  // PREMIUM BACKGROUND
+  // ==========================================
+
   const gradient =
     ctx.createLinearGradient(
       0,
       0,
-      1200,
-      630
+      1080,
+      1350
     );
 
   gradient.addColorStop(
     0,
-    "#8f1239"
+    "#250914"
+  );
+
+  gradient.addColorStop(
+    0.45,
+    "#731735"
   );
 
   gradient.addColorStop(
     1,
-    "#c72c55"
+    "#d92e65"
   );
 
   ctx.fillStyle =
@@ -1260,123 +1279,354 @@ async function createShareCard({
   ctx.fillRect(
     0,
     0,
-    1200,
-    630
+    1080,
+    1350
   );
 
-  // White card
-  ctx.fillStyle =
-    "#ffffff";
+  // ==========================================
+  // GLOW
+  // ==========================================
 
-  roundRect(
+  drawGlow(
     ctx,
-    70,
-    65,
-    1060,
-    500,
-    34
+    120,
+    180,
+    300,
+    "rgba(255,255,255,0.10)"
   );
 
-  // Logo
-  ctx.fillStyle =
-    "#9b1c3d";
-
-  ctx.beginPath();
-  ctx.arc(
-    135,
-    135,
-    38,
-    0,
-    Math.PI * 2
+  drawGlow(
+    ctx,
+    950,
+    1100,
+    350,
+    "rgba(255,90,160,0.18)"
   );
-  ctx.fill();
+
+  drawGlow(
+    ctx,
+    900,
+    220,
+    180,
+    "rgba(255,255,255,0.08)"
+  );
+
+  // ==========================================
+  // BRAND
+  // ==========================================
+
+  ctx.textAlign =
+    "left";
 
   ctx.fillStyle =
     "#ffffff";
 
   ctx.font =
-    "700 34px Arial";
+    "700 44px Arial";
+
+  ctx.fillText(
+    "ReplyAI",
+    75,
+    105
+  );
+
+  ctx.fillStyle =
+    "rgba(255,255,255,0.60)";
+
+  ctx.font =
+    "500 21px Arial";
+
+  ctx.fillText(
+    "smart replies, made simple",
+    75,
+    140
+  );
+
+  // ==========================================
+  // TONE BADGE
+  // ==========================================
+
+  const toneEmoji = {
+    Casual: "🙂",
+    Funny: "😂",
+    Romantic: "❤️",
+    Professional: "💼",
+    Polite: "🙏",
+    Confident: "😎",
+  };
+
+  const emoji =
+    toneEmoji[tone] ||
+    "✨";
+
+  ctx.fillStyle =
+    "rgba(255,255,255,0.15)";
+
+  roundRect(
+    ctx,
+    75,
+    195,
+    215,
+    58,
+    29
+  );
+
+  ctx.fillStyle =
+    "#ffffff";
+
+  ctx.font =
+    "600 23px Arial";
 
   ctx.textAlign =
     "center";
 
   ctx.fillText(
-    "R",
-    135,
-    147
+    `${emoji} ${tone || "Casual"}`,
+    182,
+    232
   );
 
-  // Brand
-  ctx.fillStyle =
-    "#171717";
+  // ==========================================
+  // INTRO
+  // ==========================================
 
   ctx.textAlign =
     "left";
 
+  ctx.fillStyle =
+    "rgba(255,255,255,0.68)";
+
   ctx.font =
-    "700 34px Arial";
+    "500 25px Arial";
 
   ctx.fillText(
-    "ReplyAI",
-    195,
-    147
+    "When you know what to say...",
+    75,
+    340
   );
 
-  // Title
+  // ==========================================
+  // MAIN REPLY CARD
+  // ==========================================
+
+  const cardX = 65;
+  const cardY = 390;
+  const cardW = 950;
+  const cardH = 485;
+
+  ctx.save();
+
+  ctx.shadowColor =
+    "rgba(0,0,0,0.32)";
+
+  ctx.shadowBlur = 45;
+
+  ctx.shadowOffsetY = 20;
+
   ctx.fillStyle =
-    "#777777";
+    "#ffffff";
+
+  roundRect(
+    ctx,
+    cardX,
+    cardY,
+    cardW,
+    cardH,
+    42
+  );
+
+  ctx.restore();
+
+  // ==========================================
+  // ACCENT LINE
+  // ==========================================
+
+  ctx.fillStyle =
+    "#e8326b";
+
+  roundRect(
+    ctx,
+    cardX,
+    cardY,
+    12,
+    cardH,
+    6
+  );
+
+  // ==========================================
+  // QUOTE ICON
+  // ==========================================
+
+  ctx.fillStyle =
+    "rgba(216,45,99,0.10)";
+
+  ctx.beginPath();
+
+  ctx.arc(
+    145,
+    465,
+    43,
+    0,
+    Math.PI * 2
+  );
+
+  ctx.fill();
+
+  ctx.fillStyle =
+    "#d82e65";
 
   ctx.font =
-    "600 24px Arial";
+    "700 58px Georgia";
+
+  ctx.textAlign =
+    "center";
 
   ctx.fillText(
-    title,
-    120,
-    215
+    "“",
+    145,
+    487
   );
 
-  // Content
+  // ==========================================
+  // ACTUAL GENERATED REPLY
+  // ==========================================
+
   ctx.fillStyle =
-    "#151515";
+    "#181318";
 
   ctx.font =
-    "700 38px Arial";
+    "700 46px Arial";
+
+  ctx.textAlign =
+    "left";
 
   drawWrappedText(
     ctx,
-    content,
-    120,
-    285,
-    960,
-    52,
+    reply,
+    115,
+    585,
+    820,
+    68,
     5
   );
 
-  // Footer
+  // ==========================================
+  // TYPING DOTS
+  // ==========================================
+
   ctx.fillStyle =
-    "#9b1c3d";
+    "rgba(24,19,24,0.16)";
 
-  ctx.font =
-    "600 22px Arial";
+  [120, 148, 176].forEach(
+    (x) => {
+      ctx.beginPath();
 
-  ctx.fillText(
-    footer,
-    120,
-    505
+      ctx.arc(
+        x,
+        790,
+        6,
+        0,
+        Math.PI * 2
+      );
+
+      ctx.fill();
+    }
   );
 
-  // Website
+  // ==========================================
+  // BOTTOM MESSAGE
+  // ==========================================
+
+  ctx.textAlign =
+    "center";
+
   ctx.fillStyle =
-    "#777777";
+    "rgba(255,255,255,0.88)";
 
   ctx.font =
-    "500 18px Arial";
+    "600 29px Arial";
+
+  ctx.fillText(
+    "Your words. Your vibe. ✨",
+    540,
+    975
+  );
+
+  // ==========================================
+  // CTA
+  // ==========================================
+
+  ctx.fillStyle =
+    "#ffffff";
+
+  roundRect(
+    ctx,
+    225,
+    1040,
+    630,
+    105,
+    52
+  );
+
+  ctx.fillStyle =
+    "#a91d48";
+
+  ctx.font =
+    "700 31px Arial";
+
+  ctx.textAlign =
+    "center";
+
+  ctx.fillText(
+    "Made with ReplyAI ✨",
+    540,
+    1105
+  );
+
+  // ==========================================
+  // WEBSITE
+  // ==========================================
+
+  ctx.fillStyle =
+    "rgba(255,255,255,0.62)";
+
+  ctx.font =
+    "500 20px Arial";
 
   ctx.fillText(
     window.location.hostname,
-    120,
-    535
+    540,
+    1225
   );
+
+  // ==========================================
+  // DECORATION
+  // ==========================================
+
+  ctx.fillStyle =
+    "rgba(255,255,255,0.85)";
+
+  ctx.font =
+    "38px Arial";
+
+  ctx.fillText(
+    "♡",
+    115,
+    1185
+  );
+
+  ctx.font =
+    "25px Arial";
+
+  ctx.fillText(
+    "♡",
+    950,
+    1185
+  );
+
+  // ==========================================
+  // CREATE PNG
+  // ==========================================
 
   const blob =
     await new Promise(
@@ -1384,7 +1634,7 @@ async function createShareCard({
         canvas.toBlob(
           resolve,
           "image/png",
-          0.95
+          1
         )
     );
 
@@ -1394,7 +1644,7 @@ async function createShareCard({
 
   return new File(
     [blob],
-    "replyai-share.png",
+    "replyai-my-reply.png",
     {
       type: "image/png",
     }
@@ -1402,7 +1652,54 @@ async function createShareCard({
 }
 
 /* ==========================================
-   CANVAS HELPERS
+   GLOW HELPER
+========================================== */
+
+function drawGlow(
+  ctx,
+  x,
+  y,
+  radius,
+  color
+) {
+  const gradient =
+    ctx.createRadialGradient(
+      x,
+      y,
+      0,
+      x,
+      y,
+      radius
+    );
+
+  gradient.addColorStop(
+    0,
+    color
+  );
+
+  gradient.addColorStop(
+    1,
+    "rgba(255,255,255,0)"
+  );
+
+  ctx.fillStyle =
+    gradient;
+
+  ctx.beginPath();
+
+  ctx.arc(
+    x,
+    y,
+    radius,
+    0,
+    Math.PI * 2
+  );
+
+  ctx.fill();
+}
+
+/* ==========================================
+   CANVAS ROUND RECT
 ========================================== */
 
 function roundRect(
@@ -1469,8 +1766,13 @@ function roundRect(
   );
 
   ctx.closePath();
+
   ctx.fill();
 }
+
+/* ==========================================
+   WRAPPED TEXT
+========================================== */
 
 function drawWrappedText(
   ctx,
