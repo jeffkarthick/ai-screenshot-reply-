@@ -972,7 +972,7 @@ export default function Home() {
                         {copied ===
                         index
                           ? "✓ Copied"
-                          : "Copy"}
+                          : "📋 Copy"}
                       </button>
 
                       <button
