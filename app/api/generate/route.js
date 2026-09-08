@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
+import { redis } from "@/lib/upstash";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
-
-// ============================================================
-// MODELS
-// ============================================================
 
 const MODELS = [
   "gemini-3.7-flash",
@@ -13,18 +11,30 @@ const MODELS = [
   "gemini-2.5-flash",
 ];
 
-// ============================================================
-// HELPERS
-// ============================================================
+const STARTING_REPLIES = 5;
 
-function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
+function createUserId() {
+  return crypto.randomUUID();
+}
+
+function getUserKey(userId) {
+  return `replyai:user:${userId}`;
+}
+
+function cleanBase64Image(image) {
+  if (!image || typeof image !== "string") {
+    return "";
+  }
+
+  if (image.includes(",")) {
+    return image.split(",")[1];
+  }
+
+  return image;
 }
 
 function isTemporaryError(status, errorText = "") {
-  const text = String(errorText).toLowerCase();
+  const text = errorText.toLowerCase();
 
   return (
     status === 429 ||
@@ -33,70 +43,91 @@ function isTemporaryError(status, errorText = "") {
     status === 503 ||
     status === 504 ||
     text.includes("high demand") ||
+    text.includes("temporarily") ||
     text.includes("unavailable") ||
-    text.includes("temporarily")
+    text.includes("overloaded")
   );
 }
 
-async function callGemini({
-  model,
-  apiKey,
-  prompt,
-  base64Image,
-  mimeType,
-}) {
-  const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/` +
-    `${model}:generateContent`;
+function buildPrompt(tone) {
+  return `
+You are ReplyAI, an expert messaging reply assistant.
 
-  const response = await fetch(url, {
-    method: "POST",
+Analyze the conversation screenshot carefully.
 
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
-    },
+Understand:
+- What the other person said
+- The conversation context
+- The emotional tone
+- The relationship/context visible in the screenshot
+- The language and writing style used in the conversation
 
-    body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
+Generate exactly 3 natural reply suggestions.
 
-          parts: [
-            {
-              text: prompt,
-            },
+Selected tone:
+${tone || "Casual"}
 
-            {
-              inlineData: {
-                mimeType,
-                data: base64Image,
-              },
-            },
-          ],
-        },
-      ],
+IMPORTANT LANGUAGE RULES:
 
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.8,
-      },
-    }),
-  });
+The replies MUST use the same language, script and writing style as the conversation in the screenshot.
 
-  const text = await response.text();
+Examples:
 
-  return {
-    response,
-    text,
-  };
+- Tamil script conversation → reply in Tamil script
+- Tanglish conversation → reply in Tanglish
+- English conversation → reply in English
+- Malayalam script → reply in Malayalam
+- Manglish → reply in Manglish
+- Hindi → reply in Hindi
+- Hinglish → reply in Hinglish
+- Mixed-language conversation → preserve the same natural mix
+
+Do NOT automatically translate the conversation into English.
+
+Do NOT convert Tanglish into Tamil script.
+
+Do NOT convert Malayalam into English.
+
+Preserve:
+- slang
+- abbreviations
+- casual spelling
+- emojis
+- punctuation style
+- texting style
+- short forms
+- natural conversational expressions
+
+The website interface language must NOT affect the reply language.
+
+The selected tone must NOT change the language.
+
+Tone should affect only the personality/style of the response.
+
+Rules:
+- Replies must sound natural and human.
+- Do not mention that you are an AI.
+- Do not invent information that is not visible in the screenshot.
+- Keep replies reasonably short.
+- Match the selected tone.
+- Preserve the conversation's language and style.
+- Return ONLY valid JSON.
+
+Format:
+{
+  "replies": [
+    "reply 1",
+    "reply 2",
+    "reply 3"
+  ]
+}
+`;
 }
 
-// ============================================================
-// POST
-// ============================================================
-
 export async function POST(req) {
+  let userId = null;
+  let isNewUser = false;
+
   try {
     const body = await req.json();
 
@@ -106,76 +137,113 @@ export async function POST(req) {
       tone,
     } = body;
 
-    // ========================================================
-    // 1. IMAGE VALIDATION
-    // ========================================================
-
-    if (
-      !image ||
-      typeof image !== "string"
-    ) {
+    if (!image) {
       return NextResponse.json(
         {
-          error:
-            "Screenshot is required.",
+          error: "Screenshot is required.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    // ========================================================
-    // 2. API KEY
-    // ========================================================
-
-    const apiKey =
-      process.env.GEMINI_API_KEY;
-
-    if (!apiKey) {
-      console.error(
-        "GEMINI_API_KEY is missing."
-      );
-
+    if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json(
         {
           error:
             "AI service is not configured.",
         },
-        { status: 500 }
-      );
-    }
-
-    // ========================================================
-    // 3. BASE64 CLEANUP
-    // ========================================================
-
-    let base64Image = image;
-
-    // Supports:
-    // data:image/jpeg;base64,XXXX
-    if (base64Image.includes(",")) {
-      base64Image =
-        base64Image.split(",")[1];
-    }
-
-    base64Image =
-      base64Image.replace(
-        /\s/g,
-        ""
-      );
-
-    if (!base64Image) {
-      return NextResponse.json(
         {
-          error:
-            "Invalid screenshot data.",
-        },
-        { status: 400 }
+          status: 500,
+        }
       );
     }
 
-    // ========================================================
-    // 4. MIME TYPE
-    // ========================================================
+    /*
+     * =========================================
+     * USER ID
+     * =========================================
+     */
+
+    const existingUserId =
+      req.cookies.get("replyai_user_id")
+        ?.value;
+
+    if (existingUserId) {
+      userId = existingUserId;
+    } else {
+      userId = createUserId();
+      isNewUser = true;
+    }
+
+    const userKey = getUserKey(userId);
+
+    /*
+     * =========================================
+     * USER RECORD
+     * =========================================
+     */
+
+    let user = await redis.get(userKey);
+
+    if (!user) {
+      user = {
+        repliesRemaining: STARTING_REPLIES,
+        totalGenerated: 0,
+        createdAt: new Date().toISOString(),
+      };
+
+      await redis.set(userKey, user);
+      isNewUser = true;
+    }
+
+    const repliesRemaining =
+      Number(user.repliesRemaining ?? 0);
+
+    /*
+     * =========================================
+     * CHECK USAGE
+     * =========================================
+     */
+
+    if (repliesRemaining <= 0) {
+      const response =
+        NextResponse.json(
+          {
+            error:
+              "You've used all your free replies.",
+            code: "NO_REPLIES_LEFT",
+            repliesRemaining: 0,
+          },
+          {
+            status: 402,
+          }
+        );
+
+      response.cookies.set(
+        "replyai_user_id",
+        userId,
+        {
+          httpOnly: true,
+          secure:
+            process.env.NODE_ENV ===
+            "production",
+          sameSite: "lax",
+          maxAge:
+            60 * 60 * 24 * 365,
+          path: "/",
+        }
+      );
+
+      return response;
+    }
+
+    /*
+     * =========================================
+     * IMAGE VALIDATION
+     * =========================================
+     */
 
     const allowedMimeTypes = [
       "image/jpeg",
@@ -186,354 +254,376 @@ export async function POST(req) {
     ];
 
     const finalMimeType =
-      allowedMimeTypes.includes(
-        mimeType
+      mimeType || "image/jpeg";
+
+    if (
+      !allowedMimeTypes.includes(
+        finalMimeType
       )
-        ? mimeType
-        : "image/jpeg";
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Unsupported image format.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
-    // ========================================================
-    // 5. TONE
-    // ========================================================
+    const cleanImage =
+      cleanBase64Image(image);
 
-    const selectedTone =
-      typeof tone === "string" &&
-      tone.trim()
-        ? tone.trim()
-        : "Casual";
+    if (!cleanImage) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid screenshot data.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
-    // ========================================================
-    // 6. PROMPT
-    // ========================================================
+    /*
+     * =========================================
+     * GEMINI REQUEST
+     * =========================================
+     */
 
-    const prompt = `
-You are ReplyAI, an expert messaging reply assistant.
-
-You are given a screenshot of a real conversation.
-
-Your job is to understand the conversation and generate exactly 3 natural replies.
-
-IMPORTANT LANGUAGE RULE:
-
-The replies MUST use the SAME LANGUAGE, SCRIPT, AND WRITING STYLE used in the conversation.
-
-Do NOT automatically reply in English.
-
-Detect the language of the latest relevant incoming message.
-
-Possible languages/styles include:
-
-- English
-- Tamil
-- Tanglish
-- Malayalam
-- Manglish
-- Hindi
-- Hinglish
-- Telugu
-- Kannada
-- Bengali
-- Marathi
-- Any other language
-- Mixed languages
-
-LANGUAGE RULES:
-
-1. Tamil script -> Tamil script.
-2. Tanglish -> Tanglish.
-3. Malayalam script -> Malayalam script.
-4. Manglish -> Manglish.
-5. Hindi -> Hindi.
-6. Hinglish -> Hinglish.
-7. English -> English.
-8. Mixed language -> preserve the same mix.
-9. Match slang and casual spelling.
-10. Match emojis when appropriate.
-11. Do not translate the conversation into English.
-12. Do not change Tanglish into Tamil script.
-13. Do not change Malayalam into English.
-14. Do not change Manglish into Malayalam script.
-15. Website language must NOT affect reply language.
-
-The conversation's language is more important than this instruction's language.
-
-SELECTED TONE:
-${selectedTone}
-
-UNDERSTAND:
-
-- What the other person said
-- Who should be replied to
-- The latest relevant message
-- Conversation context
-- Emotional tone
-- Intent
-- Natural response style
-
-REPLY RULES:
-
-- Generate exactly 3 replies.
-- Keep replies reasonably short.
-- Make them sound human.
-- Match the selected tone.
-- Match the language.
-- Match the script.
-- Match the slang/style.
-- Do not mention AI.
-- Do not mention the screenshot.
-- Do not invent information.
-- Do not explain your reasoning.
-- Do not translate the message.
-- Each reply must be different.
-
-VERY IMPORTANT:
-
-If the conversation is Tanglish, ALL 3 replies must be Tanglish.
-
-If the conversation is Tamil script, ALL 3 replies must be Tamil script.
-
-If the conversation is Malayalam, ALL 3 replies must be Malayalam.
-
-If the conversation is Manglish, ALL 3 replies must be Manglish.
-
-If the conversation is English, ALL 3 replies must be English.
-
-Return ONLY valid JSON.
-
-FORMAT:
-
-{
-  "replies": [
-    "reply 1",
-    "reply 2",
-    "reply 3"
-  ]
-}
-`;
-
-    // ========================================================
-    // 7. TRY MODELS
-    // ========================================================
-
+    let finalData = null;
     let lastError = "";
 
     for (
-      let modelIndex = 0;
-      modelIndex < MODELS.length;
-      modelIndex++
+      const model of MODELS
     ) {
-      const model =
-        MODELS[modelIndex];
+      let attempt = 0;
+      const maxAttempts = 2;
 
-      // ------------------------------------------------------
-      // Retry current model once for temporary overload
-      // ------------------------------------------------------
-
-      for (
-        let attempt = 0;
-        attempt < 2;
-        attempt++
+      while (
+        attempt < maxAttempts
       ) {
+        attempt++;
+
         try {
           console.log(
-            `Trying Gemini model: ${model}, attempt: ${
-              attempt + 1
-            }`
+            `ReplyAI: trying ${model}, attempt ${attempt}`
           );
 
-          const result =
-            await callGemini({
-              model,
-              apiKey,
-              prompt,
-              base64Image,
-              mimeType:
-                finalMimeType,
-            });
+          const response =
+            await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+              {
+                method: "POST",
 
-          const {
-            response,
-            text,
-          } = result;
+                headers: {
+                  "Content-Type":
+                    "application/json",
+                  "x-goog-api-key":
+                    process.env
+                      .GEMINI_API_KEY,
+                },
 
-          // ==================================================
-          // SUCCESS
-          // ==================================================
+                body: JSON.stringify({
+                  contents: [
+                    {
+                      parts: [
+                        {
+                          inlineData: {
+                            mimeType:
+                              finalMimeType,
+                            data:
+                              cleanImage,
+                          },
+                        },
+                        {
+                          text:
+                            buildPrompt(
+                              tone
+                            ),
+                        },
+                      ],
+                    },
+                  ],
 
-          if (response.ok) {
-            let data;
-
-            try {
-              data = JSON.parse(text);
-            } catch {
-              lastError =
-                "Gemini returned invalid JSON.";
-
-              break;
-            }
-
-            const generatedText =
-              data
-                ?.candidates?.[0]
-                ?.content?.parts
-                ?.map(
-                  (part) =>
-                    part?.text || ""
-                )
-                .join("")
-                .trim();
-
-            if (!generatedText) {
-              lastError =
-                "AI returned an empty response.";
-
-              break;
-            }
-
-            let parsed;
-
-            try {
-              parsed =
-                JSON.parse(
-                  generatedText
-                );
-            } catch {
-              console.error(
-                "Invalid generated JSON:",
-                generatedText
-              );
-
-              lastError =
-                "AI returned an invalid response.";
-
-              break;
-            }
-
-            if (
-              !parsed ||
-              !Array.isArray(
-                parsed.replies
-              )
-            ) {
-              lastError =
-                "AI returned an invalid reply format.";
-
-              break;
-            }
-
-            const replies =
-              parsed.replies
-                .filter(
-                  (reply) =>
-                    typeof reply ===
-                      "string" &&
-                    reply.trim()
-                      .length > 0
-                )
-                .map((reply) =>
-                  reply.trim()
-                )
-                .slice(0, 3);
-
-            if (
-              replies.length === 0
-            ) {
-              lastError =
-                "No replies were generated.";
-
-              break;
-            }
-
-            console.log(
-              `Gemini success using ${model}`
+                  generationConfig: {
+                    responseMimeType:
+                      "application/json",
+                    temperature: 0.8,
+                  },
+                }),
+              }
             );
 
-            return NextResponse.json({
-              replies,
-            });
-          }
+          if (!response.ok) {
+            const errorText =
+              await response.text();
 
-          // ==================================================
-          // API ERROR
-          // ==================================================
+            lastError = errorText;
 
-          lastError = text;
+            console.error(
+              `Gemini ${model} error:`,
+              errorText
+            );
 
-          console.error(
-            `Gemini ${model} error:`,
-            response.status,
-            text
-          );
+            if (
+              isTemporaryError(
+                response.status,
+                errorText
+              ) &&
+              attempt < maxAttempts
+            ) {
+              await new Promise(
+                (resolve) =>
+                  setTimeout(
+                    resolve,
+                    900
+                  )
+              );
 
-          // If temporary error:
-          // retry once, then move to next model.
-          if (
-            isTemporaryError(
-              response.status,
-              text
-            )
-          ) {
-            if (attempt === 0) {
-              await sleep(700);
               continue;
             }
 
             break;
           }
 
-          // Non-temporary error:
-          // do not blindly retry the same model.
-          break;
+          finalData =
+            await response.json();
 
+          break;
         } catch (error) {
+          lastError =
+            error?.message ||
+            "Gemini request failed.";
+
           console.error(
             `Gemini ${model} request failed:`,
             error
           );
 
-          lastError =
-            error?.message ||
-            "Gemini request failed.";
+          if (
+            attempt < maxAttempts
+          ) {
+            await new Promise(
+              (resolve) =>
+                setTimeout(
+                  resolve,
+                  900
+                )
+            );
 
-          if (attempt === 0) {
-            await sleep(700);
             continue;
           }
-
-          break;
         }
+      }
+
+      if (finalData) {
+        break;
       }
     }
 
-    // ========================================================
-    // 8. ALL MODELS FAILED
-    // ========================================================
+    /*
+     * =========================================
+     * ALL MODELS FAILED
+     * =========================================
+     */
 
-    console.error(
-      "All Gemini models failed:",
-      lastError
-    );
+    if (!finalData) {
+      console.error(
+        "All Gemini models failed:",
+        lastError
+      );
 
-    return NextResponse.json(
+      const response =
+        NextResponse.json(
+          {
+            error:
+              "Our AI service is temporarily busy. Please try again in a moment.",
+          },
+          {
+            status: 503,
+          }
+        );
+
+      response.cookies.set(
+        "replyai_user_id",
+        userId,
+        {
+          httpOnly: true,
+          secure:
+            process.env.NODE_ENV ===
+            "production",
+          sameSite: "lax",
+          maxAge:
+            60 * 60 * 24 * 365,
+          path: "/",
+        }
+      );
+
+      return response;
+    }
+
+    /*
+     * =========================================
+     * READ AI RESPONSE
+     * =========================================
+     */
+
+    const text =
+      finalData?.candidates?.[0]
+        ?.content?.parts?.[0]?.text;
+
+    if (!text) {
+      return NextResponse.json(
+        {
+          error:
+            "AI returned an empty response. Please try again.",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    let parsed;
+
+    try {
+      parsed = JSON.parse(text);
+    } catch (error) {
+      console.error(
+        "Invalid Gemini JSON:",
+        text
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "AI returned an invalid response. Please try again.",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    const replies =
+      Array.isArray(parsed?.replies)
+        ? parsed.replies
+            .filter(
+              (reply) =>
+                typeof reply ===
+                "string"
+            )
+            .slice(0, 3)
+        : [];
+
+    if (replies.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "No replies were generated. Please try again.",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    /*
+     * =========================================
+     * SUCCESS
+     *
+     * ONLY NOW consume 1 reply.
+     * Failed requests do NOT consume usage.
+     * =========================================
+     */
+
+    const newRepliesRemaining =
+      Math.max(
+        0,
+        repliesRemaining - 1
+      );
+
+    await redis.set(
+      userKey,
       {
-        error:
-          "AI is temporarily busy. Please try again in a few seconds.",
-      },
-      { status: 503 }
+        ...user,
+        repliesRemaining:
+          newRepliesRemaining,
+        totalGenerated:
+          Number(
+            user.totalGenerated ?? 0
+          ) + 1,
+        lastGeneratedAt:
+          new Date().toISOString(),
+      }
     );
 
+    /*
+     * =========================================
+     * RESPONSE
+     * =========================================
+     */
+
+    const response =
+      NextResponse.json({
+        replies,
+        repliesRemaining:
+          newRepliesRemaining,
+      });
+
+    response.cookies.set(
+      "replyai_user_id",
+      userId,
+      {
+        httpOnly: true,
+        secure:
+          process.env.NODE_ENV ===
+          "production",
+        sameSite: "lax",
+        maxAge:
+          60 * 60 * 24 * 365,
+        path: "/",
+      }
+    );
+
+    return response;
   } catch (error) {
     console.error(
-      "Generate route error:",
+      "ReplyAI generate error:",
       error
     );
 
-    return NextResponse.json(
-      {
-        error:
-          "Something went wrong. Please try again.",
-      },
-      { status: 500 }
-    );
+    const response =
+      NextResponse.json(
+        {
+          error:
+            "Something went wrong. Please try again.",
+        },
+        {
+          status: 500,
+        }
+      );
+
+    if (userId) {
+      response.cookies.set(
+        "replyai_user_id",
+        userId,
+        {
+          httpOnly: true,
+          secure:
+            process.env.NODE_ENV ===
+            "production",
+          sameSite: "lax",
+          maxAge:
+            60 * 60 * 24 * 365,
+          path: "/",
+        }
+      );
+    }
+
+    return response;
   }
 }
