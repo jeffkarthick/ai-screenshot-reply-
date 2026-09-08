@@ -35,6 +35,10 @@ export default function Home() {
   const [sharing, setSharing] = useState(null);
   const [shareMessage, setShareMessage] = useState("");
 
+  // Pre-generated referral codes
+  const [replyShareCode, setReplyShareCode] = useState("");
+  const [siteShareCode, setSiteShareCode] = useState("");
+
   // Same screenshot session
   const [uploadSessionId, setUploadSessionId] = useState("");
 
@@ -48,7 +52,9 @@ export default function Home() {
   useEffect(() => {
     async function initialize() {
       try {
-        const params = new URLSearchParams(window.location.search);
+        const params = new URLSearchParams(
+          window.location.search
+        );
 
         const ref = params.get("ref");
         const refType = params.get("type");
@@ -62,18 +68,22 @@ export default function Home() {
             const claimResponse = await fetch(
               `/api/referral/claim?ref=${encodeURIComponent(
                 ref
-              )}&type=${encodeURIComponent(refType || "")}`,
+              )}&type=${encodeURIComponent(
+                refType || ""
+              )}`,
               {
                 method: "GET",
                 cache: "no-store",
               }
             );
 
-            const claimData = await claimResponse.json();
+            const claimData =
+              await claimResponse.json();
 
             if (
               claimResponse.ok &&
-              typeof claimData.repliesRemaining === "number"
+              typeof claimData.repliesRemaining ===
+                "number"
             ) {
               setRepliesRemaining(
                 claimData.repliesRemaining
@@ -111,24 +121,57 @@ export default function Home() {
         // LOAD CURRENT BALANCE
         // --------------------------------------
 
-        const response = await fetch("/api/usage", {
-          method: "GET",
-          cache: "no-store",
-        });
+        const response = await fetch(
+          "/api/usage",
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
 
-        const data = await response.json();
+        const data =
+          await response.json();
 
         if (
           response.ok &&
-          typeof data.repliesRemaining === "number"
+          typeof data.repliesRemaining ===
+            "number"
         ) {
           setRepliesRemaining(
             data.repliesRemaining
           );
         }
+
+        // --------------------------------------
+        // PREPARE SHARE CODES
+        // --------------------------------------
+        //
+        // We create these before the user presses
+        // the Share buttons. This is important on
+        // iPhone/Safari because navigator.share()
+        // should happen directly from the click.
+        //
+
+        try {
+          const [
+            replyCode,
+            siteCode,
+          ] = await Promise.all([
+            createReferralCode("reply"),
+            createReferralCode("site"),
+          ]);
+
+          setReplyShareCode(replyCode);
+          setSiteShareCode(siteCode);
+        } catch (shareCodeError) {
+          console.error(
+            "Unable to prepare share codes:",
+            shareCodeError
+          );
+        }
       } catch (err) {
         console.error(
-          "Unable to load usage:",
+          "Unable to initialize:",
           err
         );
       } finally {
@@ -155,30 +198,42 @@ export default function Home() {
     setToneCache({});
 
     if (!file.type.startsWith("image/")) {
-      setError("Please upload an image file.");
+      setError(
+        "Please upload an image file."
+      );
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      setError("Image must be smaller than 10MB.");
+      setError(
+        "Image must be smaller than 10MB."
+      );
       return;
     }
 
     try {
-      const base64 = await fileToBase64(file);
+      const base64 =
+        await fileToBase64(file);
 
       setImage(file);
       setImageBase64(base64);
 
-      const newSessionId = crypto.randomUUID();
+      const newSessionId =
+        crypto.randomUUID();
 
-      setUploadSessionId(newSessionId);
+      setUploadSessionId(
+        newSessionId
+      );
 
       if (preview) {
-        URL.revokeObjectURL(preview);
+        URL.revokeObjectURL(
+          preview
+        );
       }
 
-      setPreview(URL.createObjectURL(file));
+      setPreview(
+        URL.createObjectURL(file)
+      );
     } catch (err) {
       console.error(err);
 
@@ -189,7 +244,8 @@ export default function Home() {
   }
 
   function handleInput(event) {
-    const file = event.target.files?.[0];
+    const file =
+      event.target.files?.[0];
 
     handleFile(file);
 
@@ -202,7 +258,9 @@ export default function Home() {
 
   function removeImage() {
     if (preview) {
-      URL.revokeObjectURL(preview);
+      URL.revokeObjectURL(
+        preview
+      );
     }
 
     setImage(null);
@@ -239,23 +297,33 @@ export default function Home() {
   // GENERATE REPLIES
   // ==========================================
 
-  async function generateReplies(selectedTone = tone) {
+  async function generateReplies(
+    selectedTone = tone
+  ) {
     if (!image || !imageBase64) {
-      setError("Please upload a screenshot first.");
+      setError(
+        "Please upload a screenshot first."
+      );
       return;
     }
 
     if (!uploadSessionId) {
-      setError("Please upload the screenshot again.");
+      setError(
+        "Please upload the screenshot again."
+      );
       return;
     }
 
     if (repliesRemaining === 0) {
-      setError("You've used all your free replies.");
+      setError(
+        "You've used all your free replies."
+      );
       return;
     }
 
-    if (requestInProgress.current) {
+    if (
+      requestInProgress.current
+    ) {
       return;
     }
 
@@ -265,12 +333,17 @@ export default function Home() {
 
     if (
       toneCache[selectedTone] &&
-      Array.isArray(toneCache[selectedTone]) &&
-      toneCache[selectedTone].length > 0
+      Array.isArray(
+        toneCache[selectedTone]
+      ) &&
+      toneCache[selectedTone].length >
+        0
     ) {
       setTone(selectedTone);
 
-      setReplies(toneCache[selectedTone]);
+      setReplies(
+        toneCache[selectedTone]
+      );
 
       setError("");
 
@@ -288,27 +361,33 @@ export default function Home() {
     }
 
     try {
-      requestInProgress.current = true;
+      requestInProgress.current =
+        true;
 
       setLoading(true);
       setError("");
       setReadyMessage("");
       setCopied(null);
 
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          image: imageBase64,
-          mimeType: image.type,
-          tone: selectedTone,
-          uploadSessionId,
-        }),
-      });
+      const response = await fetch(
+        "/api/generate",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            image: imageBase64,
+            mimeType: image.type,
+            tone: selectedTone,
+            uploadSessionId,
+          }),
+        }
+      );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       if (!response.ok) {
         console.error(
@@ -316,7 +395,10 @@ export default function Home() {
           data
         );
 
-        if (data?.code === "NO_REPLIES_LEFT") {
+        if (
+          data?.code ===
+          "NO_REPLIES_LEFT"
+        ) {
           setRepliesRemaining(0);
         }
 
@@ -335,14 +417,17 @@ export default function Home() {
         );
       }
 
-      if (data.replies.length === 0) {
+      if (
+        data.replies.length === 0
+      ) {
         throw new Error(
           "No replies were generated."
         );
       }
 
       if (
-        typeof data.repliesRemaining === "number"
+        typeof data.repliesRemaining ===
+        "number"
       ) {
         setRepliesRemaining(
           data.repliesRemaining
@@ -352,10 +437,13 @@ export default function Home() {
       setTone(selectedTone);
       setReplies(data.replies);
 
-      setToneCache((previous) => ({
-        ...previous,
-        [selectedTone]: data.replies,
-      }));
+      setToneCache(
+        (previous) => ({
+          ...previous,
+          [selectedTone]:
+            data.replies,
+        })
+      );
 
       setReadyMessage(
         `${selectedTone} replies are ready`
@@ -378,7 +466,8 @@ export default function Home() {
       );
     } finally {
       setLoading(false);
-      requestInProgress.current = false;
+      requestInProgress.current =
+        false;
     }
   }
 
@@ -386,9 +475,13 @@ export default function Home() {
   // TONE CHANGE
   // ==========================================
 
-  async function handleToneChange(newTone) {
+  async function handleToneChange(
+    newTone
+  ) {
     if (!image || !imageBase64) {
-      setError("Please upload a screenshot first.");
+      setError(
+        "Please upload a screenshot first."
+      );
       return;
     }
 
@@ -397,16 +490,23 @@ export default function Home() {
     setError("");
     setTone(newTone);
 
-    await generateReplies(newTone);
+    await generateReplies(
+      newTone
+    );
   }
 
   // ==========================================
   // COPY
   // ==========================================
 
-  async function copyReply(text, index) {
+  async function copyReply(
+    text,
+    index
+  ) {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(
+        text
+      );
 
       setCopied(index);
 
@@ -414,7 +514,9 @@ export default function Home() {
         setCopied(null);
       }, 1500);
     } catch {
-      setError("Unable to copy the reply.");
+      setError(
+        "Unable to copy the reply."
+      );
     }
   }
 
@@ -422,83 +524,50 @@ export default function Home() {
   // SHARE MY REPLY
   // ==========================================
 
-  async function shareReply(reply, index) {
-    try {
-      setSharing(`reply-${index}`);
-      setError("");
-      setShareMessage("");
+  async function shareReply(
+    reply,
+    index
+  ) {
+    setSharing(`reply-${index}`);
+    setError("");
+    setShareMessage("");
 
-      // Create referral code
-      const code = await createReferralCode("reply");
+    try {
+      // --------------------------------------
+      // BUILD SHARE URL
+      // --------------------------------------
 
       const shareUrl =
-        `${window.location.origin}/?ref=${encodeURIComponent(
-          code
-        )}&type=reply`;
+        replyShareCode
+          ? `${window.location.origin}/?ref=${encodeURIComponent(
+              replyShareCode
+            )}&type=reply`
+          : window.location.origin;
 
-      // IMPORTANT:
       // URL exists ONLY inside shareText.
-      // Do not pass url: shareUrl separately.
+      // Do NOT pass url: shareUrl separately.
+
       const shareText =
         `👀 One tap = 5 free replies for me. Do your thing 😎\n\n${shareUrl}`;
 
-      // Try to create reply image
-      let imageFile = null;
-
-      try {
-        imageFile = await createReplyShareCard({
-          reply,
-          tone,
-        });
-      } catch (imageError) {
-        console.error(
-          "Reply share image error:",
-          imageError
-        );
-      }
-
-      const canShareFiles =
-        typeof navigator !== "undefined" &&
-        typeof navigator.share === "function" &&
-        typeof navigator.canShare === "function" &&
-        imageFile &&
-        navigator.canShare({
-          files: [imageFile],
-        });
-
       // --------------------------------------
-      // IMAGE + TEXT SHARE
+      // NATIVE SHARE
       // --------------------------------------
-
-      if (canShareFiles) {
-        try {
-          await navigator.share({
-            files: [imageFile],
-            title: "ReplyAI",
-            text: shareText,
-          });
-
-          setShareMessage("Shared successfully!");
-          return;
-        } catch (shareError) {
-          if (shareError?.name === "AbortError") {
-            return;
-          }
-
-          console.error(
-            "Image share failed:",
-            shareError
-          );
-        }
-      }
-
-      // --------------------------------------
-      // TEXT SHARE FALLBACK
-      // --------------------------------------
+      //
+      // IMPORTANT:
+      // No API call.
+      // No image generation.
+      // No await before navigator.share().
+      //
+      // This makes the share flow much more
+      // reliable on iPhone/Safari.
+      //
 
       if (
-        typeof navigator !== "undefined" &&
-        typeof navigator.share === "function"
+        typeof navigator !==
+          "undefined" &&
+        typeof navigator.share ===
+          "function"
       ) {
         try {
           await navigator.share({
@@ -506,15 +575,21 @@ export default function Home() {
             text: shareText,
           });
 
-          setShareMessage("Shared successfully!");
+          setShareMessage(
+            "Shared successfully!"
+          );
+
           return;
         } catch (shareError) {
-          if (shareError?.name === "AbortError") {
+          if (
+            shareError?.name ===
+            "AbortError"
+          ) {
             return;
           }
 
           console.error(
-            "Text share failed:",
+            "Native share failed:",
             shareError
           );
         }
@@ -525,8 +600,12 @@ export default function Home() {
       // --------------------------------------
 
       if (
-        typeof navigator !== "undefined" &&
-        navigator.clipboard
+        typeof navigator !==
+          "undefined" &&
+        navigator.clipboard &&
+        typeof navigator
+          .clipboard.writeText ===
+          "function"
       ) {
         await navigator.clipboard.writeText(
           shareText
@@ -539,6 +618,10 @@ export default function Home() {
         return;
       }
 
+      // --------------------------------------
+      // FINAL FALLBACK
+      // --------------------------------------
+
       throw new Error(
         "Sharing is not available on this device."
       );
@@ -548,7 +631,9 @@ export default function Home() {
         err
       );
 
-      if (err?.name !== "AbortError") {
+      if (
+        err?.name !== "AbortError"
+      ) {
         setError(
           "Unable to share right now. Please try again."
         );
@@ -567,78 +652,36 @@ export default function Home() {
   // ==========================================
 
   async function shareReplyAI() {
-    try {
-      setSharing("site");
-      setError("");
-      setShareMessage("");
+    setSharing("site");
+    setError("");
+    setShareMessage("");
 
-      // Create referral code
-      const code = await createReferralCode("site");
+    try {
+      // --------------------------------------
+      // BUILD SHARE URL
+      // --------------------------------------
 
       const shareUrl =
-        `${window.location.origin}/?ref=${encodeURIComponent(
-          code
-        )}&type=site`;
+        siteShareCode
+          ? `${window.location.origin}/?ref=${encodeURIComponent(
+              siteShareCode
+            )}&type=site`
+          : window.location.origin;
 
-      // IMPORTANT:
       // URL exists ONLY inside shareText.
+
       const shareText =
         `👀 One tap = 5 free replies for me. Do your thing 😎\n\n${shareUrl}`;
 
-      // Try loading promo image
-      let imageFile = null;
-
-      try {
-        imageFile = await loadPromoImage();
-      } catch (imageError) {
-        console.error(
-          "Promo image error:",
-          imageError
-        );
-      }
-
-      const canShareFiles =
-        typeof navigator !== "undefined" &&
-        typeof navigator.share === "function" &&
-        typeof navigator.canShare === "function" &&
-        imageFile &&
-        navigator.canShare({
-          files: [imageFile],
-        });
-
       // --------------------------------------
-      // IMAGE + TEXT SHARE
-      // --------------------------------------
-
-      if (canShareFiles) {
-        try {
-          await navigator.share({
-            files: [imageFile],
-            title: "ReplyAI",
-            text: shareText,
-          });
-
-          setShareMessage("Shared successfully!");
-          return;
-        } catch (shareError) {
-          if (shareError?.name === "AbortError") {
-            return;
-          }
-
-          console.error(
-            "Promo image share failed:",
-            shareError
-          );
-        }
-      }
-
-      // --------------------------------------
-      // TEXT SHARE FALLBACK
+      // NATIVE SHARE
       // --------------------------------------
 
       if (
-        typeof navigator !== "undefined" &&
-        typeof navigator.share === "function"
+        typeof navigator !==
+          "undefined" &&
+        typeof navigator.share ===
+          "function"
       ) {
         try {
           await navigator.share({
@@ -646,15 +689,21 @@ export default function Home() {
             text: shareText,
           });
 
-          setShareMessage("Shared successfully!");
+          setShareMessage(
+            "Shared successfully!"
+          );
+
           return;
         } catch (shareError) {
-          if (shareError?.name === "AbortError") {
+          if (
+            shareError?.name ===
+            "AbortError"
+          ) {
             return;
           }
 
           console.error(
-            "Text share failed:",
+            "Native site share failed:",
             shareError
           );
         }
@@ -665,8 +714,12 @@ export default function Home() {
       // --------------------------------------
 
       if (
-        typeof navigator !== "undefined" &&
-        navigator.clipboard
+        typeof navigator !==
+          "undefined" &&
+        navigator.clipboard &&
+        typeof navigator
+          .clipboard.writeText ===
+          "function"
       ) {
         await navigator.clipboard.writeText(
           shareText
@@ -688,7 +741,9 @@ export default function Home() {
         err
       );
 
-      if (err?.name !== "AbortError") {
+      if (
+        err?.name !== "AbortError"
+      ) {
         setError(
           "Unable to share right now. Please try again."
         );
@@ -717,7 +772,9 @@ export default function Home() {
             R
           </div>
 
-          <span>ReplyAI</span>
+          <span>
+            ReplyAI
+          </span>
         </div>
 
         <button
@@ -766,7 +823,8 @@ export default function Home() {
             <strong>
               {balanceLoading
                 ? "Checking..."
-                : repliesRemaining === 1
+                : repliesRemaining ===
+                  1
                 ? "1 reply left"
                 : `${repliesRemaining} replies left`}
             </strong>
@@ -784,7 +842,9 @@ export default function Home() {
           type="button"
           className="shareSiteButton"
           onClick={shareReplyAI}
-          disabled={sharing !== null}
+          disabled={
+            sharing !== null
+          }
         >
           {sharing === "site"
             ? "Preparing share..."
@@ -838,7 +898,9 @@ export default function Home() {
 
                 <button
                   type="button"
-                  onClick={removeImage}
+                  onClick={
+                    removeImage
+                  }
                   className="removeButton"
                 >
                   Remove
@@ -892,35 +954,40 @@ export default function Home() {
 
           <div className="toneGrid">
 
-            {tones.map((item) => (
+            {tones.map(
+              (item) => (
 
-              <button
-                type="button"
-                key={item.name}
-                disabled={
-                  loading ||
-                  !image ||
-                  repliesRemaining === 0
-                }
-                onClick={() =>
-                  handleToneChange(item.name)
-                }
-                className={`toneButton ${
-                  tone === item.name
-                    ? "active"
-                    : ""
-                }`}
-              >
+                <button
+                  type="button"
+                  key={item.name}
+                  disabled={
+                    loading ||
+                    !image ||
+                    repliesRemaining ===
+                      0
+                  }
+                  onClick={() =>
+                    handleToneChange(
+                      item.name
+                    )
+                  }
+                  className={`toneButton ${
+                    tone === item.name
+                      ? "active"
+                      : ""
+                  }`}
+                >
 
-                <span>
-                  {item.emoji}
-                </span>
+                  <span>
+                    {item.emoji}
+                  </span>
 
-                {item.name}
+                  {item.name}
 
-              </button>
+                </button>
 
-            ))}
+              )
+            )}
 
           </div>
 
@@ -937,7 +1004,8 @@ export default function Home() {
           disabled={
             loading ||
             !image ||
-            repliesRemaining === 0
+            repliesRemaining ===
+              0
           }
         >
 
@@ -972,8 +1040,12 @@ export default function Home() {
 
             <button
               type="button"
-              onClick={shareReplyAI}
-              disabled={sharing !== null}
+              onClick={
+                shareReplyAI
+              }
+              disabled={
+                sharing !== null
+              }
             >
               📢 Share ReplyAI
             </button>
@@ -1044,7 +1116,8 @@ export default function Home() {
                           )
                         }
                       >
-                        {copied === index
+                        {copied ===
+                        index
                           ? "✓ Copied"
                           : "📋 Copy"}
                       </button>
@@ -1105,7 +1178,9 @@ export default function Home() {
 
               <button
                 type="button"
-                onClick={shareReplyAI}
+                onClick={
+                  shareReplyAI
+                }
                 disabled={
                   sharing !== null
                 }
@@ -1256,14 +1331,17 @@ export default function Home() {
    CREATE REFERRAL CODE
 ========================================== */
 
-async function createReferralCode(type) {
+async function createReferralCode(
+  type
+) {
   const response = await fetch(
     "/api/referral/create",
     {
       method: "POST",
 
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type":
+          "application/json",
       },
 
       body: JSON.stringify({
@@ -1272,9 +1350,13 @@ async function createReferralCode(type) {
     }
   );
 
-  const data = await response.json();
+  const data =
+    await response.json();
 
-  if (!response.ok || !data.code) {
+  if (
+    !response.ok ||
+    !data.code
+  ) {
     throw new Error(
       "Unable to create referral link."
     );
@@ -1288,16 +1370,20 @@ async function createReferralCode(type) {
 ========================================== */
 
 async function loadPromoImage() {
-  if (typeof window === "undefined") {
+  if (
+    typeof window ===
+    "undefined"
+  ) {
     return null;
   }
 
-  const response = await fetch(
-    `/replyai-share.png?v=20260908`,
-    {
-      cache: "no-store",
-    }
-  );
+  const response =
+    await fetch(
+      `/replyai-share.png?v=20260908`,
+      {
+        cache: "no-store",
+      }
+    );
 
   if (!response.ok) {
     throw new Error(
@@ -1305,13 +1391,16 @@ async function loadPromoImage() {
     );
   }
 
-  const blob = await response.blob();
+  const blob =
+    await response.blob();
 
   return new File(
     [blob],
     "replyai-share.png",
     {
-      type: blob.type || "image/png",
+      type:
+        blob.type ||
+        "image/png",
     }
   );
 }
@@ -1324,16 +1413,23 @@ async function createReplyShareCard({
   reply,
   tone,
 }) {
-  if (typeof document === "undefined") {
+  if (
+    typeof document ===
+    "undefined"
+  ) {
     return null;
   }
 
-  const canvas = document.createElement("canvas");
+  const canvas =
+    document.createElement(
+      "canvas"
+    );
 
   canvas.width = 1080;
   canvas.height = 1350;
 
-  const ctx = canvas.getContext("2d");
+  const ctx =
+    canvas.getContext("2d");
 
   if (!ctx) {
     return null;
@@ -1343,12 +1439,13 @@ async function createReplyShareCard({
      PREMIUM BACKGROUND
   ======================================== */
 
-  const gradient = ctx.createLinearGradient(
-    0,
-    0,
-    1080,
-    1350
-  );
+  const gradient =
+    ctx.createLinearGradient(
+      0,
+      0,
+      1080,
+      1350
+    );
 
   gradient.addColorStop(
     0,
@@ -1365,7 +1462,8 @@ async function createReplyShareCard({
     "#d92e65"
   );
 
-  ctx.fillStyle = gradient;
+  ctx.fillStyle =
+    gradient;
 
   ctx.fillRect(
     0,
@@ -1406,11 +1504,14 @@ async function createReplyShareCard({
      BRAND
   ======================================== */
 
-  ctx.textAlign = "left";
+  ctx.textAlign =
+    "left";
 
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle =
+    "#ffffff";
 
-  ctx.font = "700 44px Arial";
+  ctx.font =
+    "700 44px Arial";
 
   ctx.fillText(
     "ReplyAI",
@@ -1444,7 +1545,8 @@ async function createReplyShareCard({
   };
 
   const emoji =
-    toneEmoji[tone] || "✨";
+    toneEmoji[tone] ||
+    "✨";
 
   ctx.fillStyle =
     "rgba(255,255,255,0.15)";
@@ -1468,7 +1570,9 @@ async function createReplyShareCard({
     "center";
 
   ctx.fillText(
-    `${emoji} ${tone || "Casual"}`,
+    `${emoji} ${
+      tone || "Casual"
+    }`,
     182,
     232
   );
@@ -1715,14 +1819,15 @@ async function createReplyShareCard({
      CREATE PNG
   ======================================== */
 
-  const blob = await new Promise(
-    (resolve) =>
-      canvas.toBlob(
-        resolve,
-        "image/png",
-        1
-      )
-  );
+  const blob =
+    await new Promise(
+      (resolve) =>
+        canvas.toBlob(
+          resolve,
+          "image/png",
+          1
+        )
+    );
 
   if (!blob) {
     return null;
@@ -1870,7 +1975,9 @@ function drawWrappedText(
   maxLines
 ) {
   const words =
-    String(text).split(/\s+/);
+    String(text).split(
+      /\s+/
+    );
 
   let line = "";
   let lineCount = 0;
@@ -1891,7 +1998,8 @@ function drawWrappedText(
       );
 
     if (
-      metrics.width > maxWidth &&
+      metrics.width >
+        maxWidth &&
       line
     ) {
       ctx.fillText(
@@ -1903,22 +2011,27 @@ function drawWrappedText(
       lineCount++;
 
       if (
-        lineCount >= maxLines
+        lineCount >=
+        maxLines
       ) {
         return;
       }
 
-      line = words[i];
+      line =
+        words[i];
 
-      y += lineHeight;
+      y +=
+        lineHeight;
     } else {
-      line = testLine;
+      line =
+        testLine;
     }
   }
 
   if (
     line &&
-    lineCount < maxLines
+    lineCount <
+      maxLines
   ) {
     ctx.fillText(
       line,
@@ -1932,56 +2045,64 @@ function drawWrappedText(
    FILE → BASE64
 ========================================== */
 
-function fileToBase64(file) {
+function fileToBase64(
+  file
+) {
   return new Promise(
     (resolve, reject) => {
       const reader =
         new FileReader();
 
-      reader.onload = () => {
-        const result =
-          reader.result;
+      reader.onload =
+        () => {
+          const result =
+            reader.result;
 
-        if (
-          typeof result !==
-          "string"
-        ) {
+          if (
+            typeof result !==
+            "string"
+          ) {
+            reject(
+              new Error(
+                "Unable to read image."
+              )
+            );
+
+            return;
+          }
+
+          const parts =
+            result.split(",");
+
+          if (
+            parts.length < 2
+          ) {
+            reject(
+              new Error(
+                "Invalid image data."
+              )
+            );
+
+            return;
+          }
+
+          resolve(
+            parts[1]
+          );
+        };
+
+      reader.onerror =
+        () => {
           reject(
             new Error(
               "Unable to read image."
             )
           );
+        };
 
-          return;
-        }
-
-        const parts =
-          result.split(",");
-
-        if (
-          parts.length < 2
-        ) {
-          reject(
-            new Error(
-              "Invalid image data."
-            )
-          );
-
-          return;
-        }
-
-        resolve(parts[1]);
-      };
-
-      reader.onerror = () => {
-        reject(
-          new Error(
-            "Unable to read image."
-          )
-        );
-      };
-
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(
+        file
+      );
     }
   );
 }
