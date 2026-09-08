@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 const tones = [
   { name: "Casual", emoji: "🙂" },
@@ -14,6 +14,7 @@ const tones = [
 export default function Home() {
   const [image, setImage] = useState(null);
   const [preview, setPreview] = useState("");
+
   const [tone, setTone] = useState("Casual");
 
   const [replies, setReplies] = useState([]);
@@ -23,16 +24,34 @@ export default function Home() {
 
   const [copied, setCopied] = useState(null);
 
+  const [readyMessage, setReadyMessage] = useState("");
+
+  // Store base64 so we don't convert the same
+  // screenshot again every time a tone changes.
+  const [imageBase64, setImageBase64] = useState("");
+
+  // Store generated replies per tone.
+  const [toneCache, setToneCache] = useState({});
+
+  // Used to automatically scroll to results.
+  const resultsRef = useRef(null);
+
+  // Prevent duplicate requests.
+  const requestInProgress = useRef(false);
+
   // ==========================================
   // HANDLE FILE
   // ==========================================
 
-  function handleFile(file) {
+  async function handleFile(file) {
     if (!file) return;
 
     setError("");
     setReplies([]);
     setCopied(null);
+    setReadyMessage("");
+    setTone("Casual");
+    setToneCache({});
 
     if (!file.type.startsWith("image/")) {
       setError("Please upload an image file.");
@@ -44,13 +63,25 @@ export default function Home() {
       return;
     }
 
-    // Revoke old preview if one exists
-    if (preview) {
-      URL.revokeObjectURL(preview);
-    }
+    try {
+      const base64 = await fileToBase64(file);
 
-    setImage(file);
-    setPreview(URL.createObjectURL(file));
+      setImage(file);
+      setImageBase64(base64);
+
+      if (preview) {
+        URL.revokeObjectURL(preview);
+      }
+
+      setPreview(URL.createObjectURL(file));
+
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        "Unable to read the screenshot. Please try again."
+      );
+    }
   }
 
   function handleInput(event) {
@@ -58,7 +89,7 @@ export default function Home() {
 
     handleFile(file);
 
-    // Allow selecting the same image again
+    // Allows selecting the same image again.
     event.target.value = "";
   }
 
@@ -73,10 +104,29 @@ export default function Home() {
 
     setImage(null);
     setPreview("");
+    setImageBase64("");
+
     setReplies([]);
-    setError("");
-    setCopied(null);
+    setToneCache({});
+
     setTone("Casual");
+
+    setError("");
+    setReadyMessage("");
+    setCopied(null);
+  }
+
+  // ==========================================
+  // SCROLL TO RESULTS
+  // ==========================================
+
+  function showResults() {
+    setTimeout(() => {
+      resultsRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 150);
   }
 
   // ==========================================
@@ -84,46 +134,93 @@ export default function Home() {
   // ==========================================
 
   async function generateReplies(selectedTone = tone) {
-    if (!image) {
+    if (!image || !imageBase64) {
       setError("Please upload a screenshot first.");
       return;
     }
 
+    // Don't allow duplicate requests.
+    if (requestInProgress.current) {
+      return;
+    }
+
+    // ========================================
+    // USE CACHE IF AVAILABLE
+    // ========================================
+
+    if (
+      toneCache[selectedTone] &&
+      Array.isArray(toneCache[selectedTone]) &&
+      toneCache[selectedTone].length > 0
+    ) {
+      setTone(selectedTone);
+      setReplies(toneCache[selectedTone]);
+      setError("");
+
+      setReadyMessage(
+        `${selectedTone} replies are ready`
+      );
+
+      showResults();
+
+      setTimeout(() => {
+        setReadyMessage("");
+      }, 2500);
+
+      return;
+    }
+
     try {
+      requestInProgress.current = true;
+
       setLoading(true);
       setError("");
+      setReadyMessage("");
       setCopied(null);
 
-      // IMPORTANT:
-      // Do NOT clear previous replies here.
-      // This keeps the UI stable while changing tone.
+      // ========================================
+      // API REQUEST
+      // ========================================
 
-      const base64 = await fileToBase64(image);
+      const response = await fetch(
+        "/api/generate",
+        {
+          method: "POST",
 
-      const response = await fetch("/api/generate", {
-        method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
 
-        headers: {
-          "Content-Type": "application/json",
-        },
-
-        body: JSON.stringify({
-          image: base64,
-          mimeType: image.type,
-          tone: selectedTone,
-        }),
-      });
+          body: JSON.stringify({
+            image: imageBase64,
+            mimeType: image.type,
+            tone: selectedTone,
+          }),
+        }
+      );
 
       const data = await response.json();
 
+      // ========================================
+      // API ERROR
+      // ========================================
+
       if (!response.ok) {
-        console.error("Generate API error:", data);
+        console.error(
+          "Generate API error:",
+          data
+        );
 
         throw new Error(
+          data?.details ||
           data?.error ||
-            "Unable to generate replies."
+          "Unable to generate replies."
         );
       }
+
+      // ========================================
+      // VALIDATE RESPONSE
+      // ========================================
 
       if (
         !data.replies ||
@@ -140,18 +237,52 @@ export default function Home() {
         );
       }
 
-      setReplies(data.replies);
+      // ========================================
+      // SAVE RESULT
+      // ========================================
+
       setTone(selectedTone);
 
+      setReplies(data.replies);
+
+      // Cache this tone.
+      setToneCache((previous) => ({
+        ...previous,
+        [selectedTone]: data.replies,
+      }));
+
+      // ========================================
+      // SUCCESS MESSAGE
+      // ========================================
+
+      setReadyMessage(
+        `${selectedTone} replies are ready`
+      );
+
+      // ========================================
+      // AUTO SCROLL
+      // ========================================
+
+      showResults();
+
+      setTimeout(() => {
+        setReadyMessage("");
+      }, 2500);
+
     } catch (err) {
-      console.error("Generate error:", err);
+      console.error(
+        "Generate error:",
+        err
+      );
 
       setError(
         err?.message ||
-          "Something went wrong. Please try again."
+        "Something went wrong. Please try again."
       );
+
     } finally {
       setLoading(false);
+      requestInProgress.current = false;
     }
   }
 
@@ -160,22 +291,25 @@ export default function Home() {
   // ==========================================
 
   async function handleToneChange(newTone) {
-    if (!image) {
-      setTone(newTone);
-      setError("Please upload a screenshot first.");
+    if (!image || !imageBase64) {
+      setError(
+        "Please upload a screenshot first."
+      );
       return;
     }
 
-    // Change selected tone immediately
+    if (loading) {
+      return;
+    }
+
+    setError("");
     setTone(newTone);
 
-    // Automatically regenerate using
-    // the SAME uploaded screenshot.
     await generateReplies(newTone);
   }
 
   // ==========================================
-  // COPY REPLY
+  // COPY
   // ==========================================
 
   async function copyReply(text, index) {
@@ -187,8 +321,11 @@ export default function Home() {
       setTimeout(() => {
         setCopied(null);
       }, 1500);
+
     } catch {
-      setError("Unable to copy the reply.");
+      setError(
+        "Unable to copy the reply."
+      );
     }
   }
 
@@ -202,6 +339,7 @@ export default function Home() {
       <nav className="navbar">
 
         <div className="brand">
+
           <div className="brandIcon">
             R
           </div>
@@ -209,9 +347,11 @@ export default function Home() {
           <span>
             ReplyAI
           </span>
+
         </div>
 
         <button
+          type="button"
           className="navButton"
           onClick={() =>
             document
@@ -225,6 +365,7 @@ export default function Home() {
         </button>
 
       </nav>
+
 
       {/* ========================================
           HERO
@@ -246,8 +387,9 @@ export default function Home() {
           and get natural replies in seconds.
         </p>
 
+
         {/* ======================================
-            UPLOAD CARD
+            UPLOAD
         ====================================== */}
 
         <div className="card">
@@ -313,6 +455,7 @@ export default function Home() {
 
         </div>
 
+
         {/* ======================================
             ERROR
         ====================================== */}
@@ -323,8 +466,20 @@ export default function Home() {
           </div>
         )}
 
+
         {/* ======================================
-            TONE
+            SUCCESS
+        ====================================== */}
+
+        {readyMessage && (
+          <div className="successBox">
+            ✓ {readyMessage}
+          </div>
+        )}
+
+
+        {/* ======================================
+            TONES
         ====================================== */}
 
         <div className="toneSection">
@@ -340,10 +495,14 @@ export default function Home() {
               <button
                 type="button"
                 key={item.name}
-                onClick={() =>
-                  handleToneChange(item.name)
+                disabled={
+                  loading || !image
                 }
-                disabled={loading || !image}
+                onClick={() =>
+                  handleToneChange(
+                    item.name
+                  )
+                }
                 className={`toneButton ${
                   tone === item.name
                     ? "active"
@@ -365,15 +524,20 @@ export default function Home() {
 
         </div>
 
+
         {/* ======================================
-            GENERATE BUTTON
+            GENERATE
         ====================================== */}
 
         <button
           type="button"
           className="generateButton"
-          onClick={() => generateReplies(tone)}
-          disabled={loading || !image}
+          onClick={() =>
+            generateReplies(tone)
+          }
+          disabled={
+            loading || !image
+          }
         >
 
           {loading ? (
@@ -393,13 +557,17 @@ export default function Home() {
 
         </button>
 
+
         {/* ======================================
             RESULTS
         ====================================== */}
 
         {replies.length > 0 && (
 
-          <section className="results">
+          <section
+            ref={resultsRef}
+            className="results"
+          >
 
             <div className="resultsHeader">
 
@@ -419,6 +587,7 @@ export default function Home() {
               </div>
 
             </div>
+
 
             <div className="replyList">
 
@@ -468,6 +637,7 @@ export default function Home() {
 
       </section>
 
+
       {/* ========================================
           HOW IT WORKS
       ======================================== */}
@@ -500,6 +670,7 @@ export default function Home() {
 
           </div>
 
+
           <div className="step">
 
             <div>
@@ -517,6 +688,7 @@ export default function Home() {
             </p>
 
           </div>
+
 
           <div className="step">
 
@@ -538,6 +710,7 @@ export default function Home() {
         </div>
 
       </section>
+
 
       {/* ========================================
           FOOTER
@@ -602,20 +775,24 @@ export default function Home() {
 
 
 /* ==========================================
-   CONVERT IMAGE TO BASE64
+   FILE → BASE64
    ========================================== */
 
 function fileToBase64(file) {
   return new Promise(
     (resolve, reject) => {
 
-      const reader = new FileReader();
+      const reader =
+        new FileReader();
 
       reader.onload = () => {
 
-        const result = reader.result;
+        const result =
+          reader.result;
 
-        if (typeof result !== "string") {
+        if (
+          typeof result !== "string"
+        ) {
           reject(
             new Error(
               "Unable to read image."
@@ -625,7 +802,8 @@ function fileToBase64(file) {
           return;
         }
 
-        const parts = result.split(",");
+        const parts =
+          result.split(",");
 
         if (parts.length < 2) {
           reject(
