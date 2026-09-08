@@ -35,7 +35,7 @@ export default function Home() {
   const [sharing, setSharing] = useState(null);
   const [shareMessage, setShareMessage] = useState("");
 
-  // Pre-generated referral codes
+  // Referral codes prepared before share
   const [replyShareCode, setReplyShareCode] = useState("");
   const [siteShareCode, setSiteShareCode] = useState("");
 
@@ -109,7 +109,6 @@ export default function Home() {
             );
           }
 
-          // Remove referral query from browser URL
           window.history.replaceState(
             {},
             document.title,
@@ -118,7 +117,7 @@ export default function Home() {
         }
 
         // --------------------------------------
-        // LOAD CURRENT BALANCE
+        // LOAD BALANCE
         // --------------------------------------
 
         const response = await fetch(
@@ -143,14 +142,8 @@ export default function Home() {
         }
 
         // --------------------------------------
-        // PREPARE SHARE CODES
+        // PREPARE REFERRAL CODES
         // --------------------------------------
-        //
-        // We create these before the user presses
-        // the Share buttons. This is important on
-        // iPhone/Safari because navigator.share()
-        // should happen directly from the click.
-        //
 
         try {
           const [
@@ -533,10 +526,6 @@ export default function Home() {
     setShareMessage("");
 
     try {
-      // --------------------------------------
-      // BUILD SHARE URL
-      // --------------------------------------
-
       const shareUrl =
         replyShareCode
           ? `${window.location.origin}/?ref=${encodeURIComponent(
@@ -544,24 +533,78 @@ export default function Home() {
             )}&type=reply`
           : window.location.origin;
 
-      // URL exists ONLY inside shareText.
-      // Do NOT pass url: shareUrl separately.
-
       const shareText =
         `👀 One tap = 5 free replies for me. Do your thing 😎\n\n${shareUrl}`;
 
       // --------------------------------------
-      // NATIVE SHARE
+      // CREATE IMAGE
       // --------------------------------------
-      //
-      // IMPORTANT:
-      // No API call.
-      // No image generation.
-      // No await before navigator.share().
-      //
-      // This makes the share flow much more
-      // reliable on iPhone/Safari.
-      //
+
+      let imageFile = null;
+
+      try {
+        imageFile =
+          await createReplyShareCard({
+            reply,
+            tone,
+          });
+      } catch (imageError) {
+        console.error(
+          "Reply image creation failed:",
+          imageError
+        );
+      }
+
+      // --------------------------------------
+      // IMAGE SHARE
+      // --------------------------------------
+
+      if (
+        imageFile &&
+        typeof navigator !==
+          "undefined" &&
+        typeof navigator.share ===
+          "function" &&
+        typeof navigator.canShare ===
+          "function"
+      ) {
+        try {
+          const fileShareSupported =
+            navigator.canShare({
+              files: [imageFile],
+            });
+
+          if (fileShareSupported) {
+            await navigator.share({
+              files: [imageFile],
+              title: "ReplyAI",
+              text: shareText,
+            });
+
+            setShareMessage(
+              "Shared successfully!"
+            );
+
+            return;
+          }
+        } catch (shareError) {
+          if (
+            shareError?.name ===
+            "AbortError"
+          ) {
+            return;
+          }
+
+          console.error(
+            "Reply image share failed:",
+            shareError
+          );
+        }
+      }
+
+      // --------------------------------------
+      // TEXT SHARE FALLBACK
+      // --------------------------------------
 
       if (
         typeof navigator !==
@@ -589,7 +632,7 @@ export default function Home() {
           }
 
           console.error(
-            "Native share failed:",
+            "Reply text share failed:",
             shareError
           );
         }
@@ -618,10 +661,6 @@ export default function Home() {
         return;
       }
 
-      // --------------------------------------
-      // FINAL FALLBACK
-      // --------------------------------------
-
       throw new Error(
         "Sharing is not available on this device."
       );
@@ -632,7 +671,8 @@ export default function Home() {
       );
 
       if (
-        err?.name !== "AbortError"
+        err?.name !==
+        "AbortError"
       ) {
         setError(
           "Unable to share right now. Please try again."
@@ -657,10 +697,6 @@ export default function Home() {
     setShareMessage("");
 
     try {
-      // --------------------------------------
-      // BUILD SHARE URL
-      // --------------------------------------
-
       const shareUrl =
         siteShareCode
           ? `${window.location.origin}/?ref=${encodeURIComponent(
@@ -668,13 +704,74 @@ export default function Home() {
             )}&type=site`
           : window.location.origin;
 
-      // URL exists ONLY inside shareText.
-
       const shareText =
         `👀 One tap = 5 free replies for me. Do your thing 😎\n\n${shareUrl}`;
 
       // --------------------------------------
-      // NATIVE SHARE
+      // LOAD PROMO IMAGE
+      // --------------------------------------
+
+      let imageFile = null;
+
+      try {
+        imageFile =
+          await loadPromoImage();
+      } catch (imageError) {
+        console.error(
+          "Promo image loading failed:",
+          imageError
+        );
+      }
+
+      // --------------------------------------
+      // IMAGE + TEXT SHARE
+      // --------------------------------------
+
+      if (
+        imageFile &&
+        typeof navigator !==
+          "undefined" &&
+        typeof navigator.share ===
+          "function" &&
+        typeof navigator.canShare ===
+          "function"
+      ) {
+        try {
+          const fileShareSupported =
+            navigator.canShare({
+              files: [imageFile],
+            });
+
+          if (fileShareSupported) {
+            await navigator.share({
+              files: [imageFile],
+              title: "ReplyAI",
+              text: shareText,
+            });
+
+            setShareMessage(
+              "Shared successfully!"
+            );
+
+            return;
+          }
+        } catch (shareError) {
+          if (
+            shareError?.name ===
+            "AbortError"
+          ) {
+            return;
+          }
+
+          console.error(
+            "Promo image share failed:",
+            shareError
+          );
+        }
+      }
+
+      // --------------------------------------
+      // TEXT SHARE FALLBACK
       // --------------------------------------
 
       if (
@@ -703,7 +800,7 @@ export default function Home() {
           }
 
           console.error(
-            "Native site share failed:",
+            "Site text share failed:",
             shareError
           );
         }
@@ -742,7 +839,8 @@ export default function Home() {
       );
 
       if (
-        err?.name !== "AbortError"
+        err?.name !==
+        "AbortError"
       ) {
         setError(
           "Unable to share right now. Please try again."
@@ -814,7 +912,6 @@ export default function Home() {
         {/* REPLY BALANCE */}
 
         <div className="repliesCounter">
-
           <span className="counterIcon">
             ✨
           </span>
@@ -833,7 +930,6 @@ export default function Home() {
               Free replies
             </small>
           </div>
-
         </div>
 
         {/* SHARE REPLYAI */}
@@ -1331,9 +1427,7 @@ export default function Home() {
    CREATE REFERRAL CODE
 ========================================== */
 
-async function createReferralCode(
-  type
-) {
+async function createReferralCode(type) {
   const response = await fetch(
     "/api/referral/create",
     {
@@ -1435,10 +1529,6 @@ async function createReplyShareCard({
     return null;
   }
 
-  /* ========================================
-     PREMIUM BACKGROUND
-  ======================================== */
-
   const gradient =
     ctx.createLinearGradient(
       0,
@@ -1472,10 +1562,6 @@ async function createReplyShareCard({
     1350
   );
 
-  /* ========================================
-     GLOW
-  ======================================== */
-
   drawGlow(
     ctx,
     120,
@@ -1500,9 +1586,7 @@ async function createReplyShareCard({
     "rgba(255,255,255,0.08)"
   );
 
-  /* ========================================
-     BRAND
-  ======================================== */
+  // BRAND
 
   ctx.textAlign =
     "left";
@@ -1531,9 +1615,7 @@ async function createReplyShareCard({
     140
   );
 
-  /* ========================================
-     TONE BADGE
-  ======================================== */
+  // TONE
 
   const toneEmoji = {
     Casual: "🙂",
@@ -1577,9 +1659,7 @@ async function createReplyShareCard({
     232
   );
 
-  /* ========================================
-     INTRO
-  ======================================== */
+  // INTRO
 
   ctx.textAlign =
     "left";
@@ -1596,9 +1676,7 @@ async function createReplyShareCard({
     340
   );
 
-  /* ========================================
-     MAIN REPLY CARD
-  ======================================== */
+  // REPLY CARD
 
   const cardX = 65;
   const cardY = 390;
@@ -1628,9 +1706,7 @@ async function createReplyShareCard({
 
   ctx.restore();
 
-  /* ========================================
-     ACCENT LINE
-  ======================================== */
+  // ACCENT
 
   ctx.fillStyle =
     "#e8326b";
@@ -1644,9 +1720,7 @@ async function createReplyShareCard({
     6
   );
 
-  /* ========================================
-     QUOTE ICON
-  ======================================== */
+  // QUOTE
 
   ctx.fillStyle =
     "rgba(216,45,99,0.10)";
@@ -1678,9 +1752,7 @@ async function createReplyShareCard({
     487
   );
 
-  /* ========================================
-     GENERATED REPLY
-  ======================================== */
+  // GENERATED REPLY
 
   ctx.fillStyle =
     "#181318";
@@ -1701,9 +1773,7 @@ async function createReplyShareCard({
     5
   );
 
-  /* ========================================
-     TYPING DOTS
-  ======================================== */
+  // TYPING DOTS
 
   ctx.fillStyle =
     "rgba(24,19,24,0.16)";
@@ -1724,9 +1794,7 @@ async function createReplyShareCard({
     }
   );
 
-  /* ========================================
-     BOTTOM MESSAGE
-  ======================================== */
+  // BOTTOM
 
   ctx.textAlign =
     "center";
@@ -1743,9 +1811,7 @@ async function createReplyShareCard({
     975
   );
 
-  /* ========================================
-     CTA
-  ======================================== */
+  // CTA
 
   ctx.fillStyle =
     "#ffffff";
@@ -1774,9 +1840,7 @@ async function createReplyShareCard({
     1105
   );
 
-  /* ========================================
-     WEBSITE
-  ======================================== */
+  // WEBSITE
 
   ctx.fillStyle =
     "rgba(255,255,255,0.62)";
@@ -1790,9 +1854,7 @@ async function createReplyShareCard({
     1225
   );
 
-  /* ========================================
-     DECORATION
-  ======================================== */
+  // DECORATION
 
   ctx.fillStyle =
     "rgba(255,255,255,0.85)";
@@ -1815,9 +1877,7 @@ async function createReplyShareCard({
     1185
   );
 
-  /* ========================================
-     CREATE PNG
-  ======================================== */
+  // PNG
 
   const blob =
     await new Promise(
@@ -1843,7 +1903,7 @@ async function createReplyShareCard({
 }
 
 /* ==========================================
-   GLOW HELPER
+   GLOW
 ========================================== */
 
 function drawGlow(
@@ -1890,7 +1950,7 @@ function drawGlow(
 }
 
 /* ==========================================
-   CANVAS ROUND RECT
+   ROUND RECT
 ========================================== */
 
 function roundRect(
