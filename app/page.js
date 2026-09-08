@@ -125,7 +125,8 @@ export default function Home() {
           }
         );
 
-        const data = await response.json();
+        const data =
+          await response.json();
 
         if (
           response.ok &&
@@ -165,27 +166,37 @@ export default function Home() {
     setToneCache({});
 
     if (!file.type.startsWith("image/")) {
-      setError("Please upload an image file.");
+      setError(
+        "Please upload an image file."
+      );
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      setError("Image must be smaller than 10MB.");
+      setError(
+        "Image must be smaller than 10MB."
+      );
       return;
     }
 
     try {
-      const base64 = await fileToBase64(file);
+      const base64 =
+        await fileToBase64(file);
 
       setImage(file);
       setImageBase64(base64);
 
-      const newSessionId = crypto.randomUUID();
+      const newSessionId =
+        crypto.randomUUID();
 
-      setUploadSessionId(newSessionId);
+      setUploadSessionId(
+        newSessionId
+      );
 
       if (preview) {
-        URL.revokeObjectURL(preview);
+        URL.revokeObjectURL(
+          preview
+        );
       }
 
       setPreview(
@@ -215,7 +226,9 @@ export default function Home() {
 
   function removeImage() {
     if (preview) {
-      URL.revokeObjectURL(preview);
+      URL.revokeObjectURL(
+        preview
+      );
     }
 
     setImage(null);
@@ -241,10 +254,12 @@ export default function Home() {
 
   function showResults() {
     setTimeout(() => {
-      resultsRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      resultsRef.current?.scrollIntoView(
+        {
+          behavior: "smooth",
+          block: "start",
+        }
+      );
     }, 150);
   }
 
@@ -292,9 +307,11 @@ export default function Home() {
       toneCache[selectedTone].length > 0
     ) {
       setTone(selectedTone);
+
       setReplies(
         toneCache[selectedTone]
       );
+
       setError("");
 
       setReadyMessage(
@@ -318,22 +335,23 @@ export default function Home() {
       setReadyMessage("");
       setCopied(null);
 
-      const response = await fetch(
-        "/api/generate",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            image: imageBase64,
-            mimeType: image.type,
-            tone: selectedTone,
-            uploadSessionId,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          "/api/generate",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              image: imageBase64,
+              mimeType: image.type,
+              tone: selectedTone,
+              uploadSessionId,
+            }),
+          }
+        );
 
       const data =
         await response.json();
@@ -359,7 +377,9 @@ export default function Home() {
 
       if (
         !data.replies ||
-        !Array.isArray(data.replies)
+        !Array.isArray(
+          data.replies
+        )
       ) {
         throw new Error(
           "AI returned an invalid response."
@@ -367,7 +387,8 @@ export default function Home() {
       }
 
       if (
-        data.replies.length === 0
+        data.replies.length ===
+        0
       ) {
         throw new Error(
           "No replies were generated."
@@ -438,7 +459,9 @@ export default function Home() {
     setError("");
     setTone(newTone);
 
-    await generateReplies(newTone);
+    await generateReplies(
+      newTone
+    );
   }
 
   // ==========================================
@@ -475,9 +498,13 @@ export default function Home() {
     index
   ) {
     try {
-      setSharing(`reply-${index}`);
+      setSharing(
+        `reply-${index}`
+      );
+
       setError("");
 
+      // Create referral code
       const code =
         await createReferralCode(
           "reply"
@@ -488,11 +515,11 @@ export default function Home() {
           code
         )}&type=reply`;
 
+      // Short and friendly WhatsApp message
       const shareText =
         `👀 One tap = 5 free replies for me. Do your thing 😎\n\n${shareUrl}`;
 
-      // Create beautiful image
-      // using the actual generated reply
+      // Create attractive generated-reply image
       const imageFile =
         await createReplyShareCard({
           reply,
@@ -509,6 +536,10 @@ export default function Home() {
           files: [imageFile],
         });
 
+      // --------------------------------------
+      // IMAGE SHARE
+      // --------------------------------------
+
       if (canShareFiles) {
         await navigator.share({
           files: [imageFile],
@@ -519,19 +550,30 @@ export default function Home() {
         setShareMessage(
           "Shared successfully!"
         );
-      } else if (
+      }
+
+      // --------------------------------------
+      // TEXT SHARE FALLBACK
+      // --------------------------------------
+
+      else if (
         navigator.share
       ) {
         await navigator.share({
           title: "ReplyAI",
           text: shareText,
-          url: shareUrl,
         });
 
         setShareMessage(
           "Shared successfully!"
         );
-      } else {
+      }
+
+      // --------------------------------------
+      // CLIPBOARD FALLBACK
+      // --------------------------------------
+
+      else {
         await navigator.clipboard.writeText(
           shareText
         );
@@ -572,6 +614,7 @@ export default function Home() {
       setSharing("site");
       setError("");
 
+      // Create referral code
       const code =
         await createReferralCode(
           "site"
@@ -582,10 +625,11 @@ export default function Home() {
           code
         )}&type=site`;
 
+      // Short and friendly WhatsApp message
       const shareText =
         `👀 One tap = 5 free replies for me. Do your thing 😎\n\n${shareUrl}`;
 
-      // Load the website promotional image
+      // Load actual website promotional image
       const imageFile =
         await loadPromoImage();
 
@@ -599,6 +643,10 @@ export default function Home() {
           files: [imageFile],
         });
 
+      // --------------------------------------
+      // IMAGE SHARE
+      // --------------------------------------
+
       if (canShareFiles) {
         await navigator.share({
           files: [imageFile],
@@ -609,19 +657,30 @@ export default function Home() {
         setShareMessage(
           "Shared successfully!"
         );
-      } else if (
+      }
+
+      // --------------------------------------
+      // TEXT SHARE FALLBACK
+      // --------------------------------------
+
+      else if (
         navigator.share
       ) {
         await navigator.share({
           title: "ReplyAI",
           text: shareText,
-          url: shareUrl,
         });
 
         setShareMessage(
           "Shared successfully!"
         );
-      } else {
+      }
+
+      // --------------------------------------
+      // CLIPBOARD FALLBACK
+      // --------------------------------------
+
+      else {
         await navigator.clipboard.writeText(
           shareText
         );
@@ -659,7 +718,10 @@ export default function Home() {
 
   return (
     <main className="page">
-      {/* NAVBAR */}
+
+      {/* ======================================
+          NAVBAR
+      ====================================== */}
 
       <nav className="navbar">
         <div className="brand">
@@ -677,7 +739,9 @@ export default function Home() {
           className="navButton"
           onClick={() =>
             document
-              .getElementById("how")
+              .getElementById(
+                "how"
+              )
               ?.scrollIntoView({
                 behavior: "smooth",
               })
@@ -687,9 +751,12 @@ export default function Home() {
         </button>
       </nav>
 
-      {/* HERO */}
+      {/* ======================================
+          HERO
+      ====================================== */}
 
       <section className="hero">
+
         <div className="badge">
           ✨ AI-powered reply assistant
         </div>
@@ -705,9 +772,12 @@ export default function Home() {
           replies in seconds.
         </p>
 
-        {/* REPLY BALANCE */}
+        {/* ====================================
+            REPLY BALANCE
+        ==================================== */}
 
         <div className="repliesCounter">
+
           <span className="counterIcon">
             ✨
           </span>
@@ -726,32 +796,45 @@ export default function Home() {
               Free replies
             </small>
           </div>
+
         </div>
 
-        {/* SHARE REPLYAI */}
+        {/* ====================================
+            SHARE REPLYAI
+        ==================================== */}
 
         <button
           type="button"
           className="shareSiteButton"
-          onClick={shareReplyAI}
+          onClick={
+            shareReplyAI
+          }
           disabled={
             sharing !== null
           }
         >
-          {sharing === "site"
+          {sharing ===
+          "site"
             ? "Preparing share..."
             : "📢 Share ReplyAI"}
         </button>
 
-        {/* UPLOAD */}
+        {/* ====================================
+            UPLOAD
+        ==================================== */}
 
         <div className="card">
+
           {!preview ? (
+
             <label className="uploadArea">
+
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
-                onChange={handleInput}
+                onChange={
+                  handleInput
+                }
                 hidden
               />
 
@@ -772,10 +855,15 @@ export default function Home() {
                 PNG, JPG, WEBP or HEIC ·
                 Max 10MB
               </span>
+
             </label>
+
           ) : (
+
             <div className="previewArea">
+
               <div className="previewHeader">
+
                 <span>
                   Screenshot
                 </span>
@@ -789,6 +877,7 @@ export default function Home() {
                 >
                   Remove
                 </button>
+
               </div>
 
               <img
@@ -796,11 +885,15 @@ export default function Home() {
                 alt="Uploaded conversation screenshot"
                 className="previewImage"
               />
+
             </div>
           )}
+
         </div>
 
-        {/* ERROR */}
+        {/* ====================================
+            ERROR
+        ==================================== */}
 
         {error && (
           <div className="errorBox">
@@ -808,7 +901,9 @@ export default function Home() {
           </div>
         )}
 
-        {/* SUCCESS */}
+        {/* ====================================
+            SUCCESS
+        ==================================== */}
 
         {readyMessage && (
           <div className="successBox">
@@ -816,7 +911,9 @@ export default function Home() {
           </div>
         )}
 
-        {/* SHARE MESSAGE */}
+        {/* ====================================
+            SHARE MESSAGE
+        ==================================== */}
 
         {shareMessage && (
           <div className="shareSuccessBox">
@@ -824,62 +921,81 @@ export default function Home() {
           </div>
         )}
 
-        {/* TONES */}
+        {/* ====================================
+            TONES
+        ==================================== */}
 
         <div className="toneSection">
+
           <div className="sectionTitle">
             Choose your vibe
           </div>
 
           <div className="toneGrid">
-            {tones.map((item) => (
-              <button
-                type="button"
-                key={item.name}
-                disabled={
-                  loading ||
-                  !image ||
-                  repliesRemaining ===
-                    0
-                }
-                onClick={() =>
-                  handleToneChange(
-                    item.name
-                  )
-                }
-                className={`toneButton ${
-                  tone === item.name
-                    ? "active"
-                    : ""
-                }`}
-              >
-                <span>
-                  {item.emoji}
-                </span>
 
-                {item.name}
-              </button>
-            ))}
+            {tones.map(
+              (item) => (
+
+                <button
+                  type="button"
+                  key={item.name}
+                  disabled={
+                    loading ||
+                    !image ||
+                    repliesRemaining ===
+                      0
+                  }
+                  onClick={() =>
+                    handleToneChange(
+                      item.name
+                    )
+                  }
+                  className={`toneButton ${
+                    tone ===
+                    item.name
+                      ? "active"
+                      : ""
+                  }`}
+                >
+
+                  <span>
+                    {item.emoji}
+                  </span>
+
+                  {item.name}
+
+                </button>
+
+              )
+            )}
+
           </div>
         </div>
 
-        {/* GENERATE */}
+        {/* ====================================
+            GENERATE
+        ==================================== */}
 
         <button
           type="button"
           className="generateButton"
           onClick={() =>
-            generateReplies(tone)
+            generateReplies(
+              tone
+            )
           }
           disabled={
             loading ||
             !image ||
-            repliesRemaining === 0
+            repliesRemaining ===
+              0
           }
         >
+
           {loading ? (
             <>
               <span className="spinner"></span>
+
               Understanding
               screenshot...
             </>
@@ -888,12 +1004,18 @@ export default function Home() {
               ✨ Generate Replies
             </>
           )}
+
         </button>
 
-        {/* NO REPLIES */}
+        {/* ====================================
+            NO REPLIES
+        ==================================== */}
 
-        {repliesRemaining === 0 && (
+        {repliesRemaining ===
+          0 && (
+
           <div className="noRepliesBox">
+
             <strong>
               You've used all your
               free replies.
@@ -915,18 +1037,26 @@ export default function Home() {
             >
               📢 Share ReplyAI
             </button>
+
           </div>
         )}
 
-        {/* RESULTS */}
+        {/* ====================================
+            RESULTS
+        ==================================== */}
 
-        {replies.length > 0 && (
+        {replies.length >
+          0 && (
+
           <section
             ref={resultsRef}
             className="results"
           >
+
             <div className="resultsHeader">
+
               <div>
+
                 <h2>
                   Suggested Replies
                 </h2>
@@ -937,19 +1067,28 @@ export default function Home() {
                     {tone}
                   </strong>
                 </p>
+
               </div>
+
             </div>
 
+            {/* =================================
+                REPLY LIST
+            ================================= */}
+
             <div className="replyList">
+
               {replies.map(
                 (
                   reply,
                   index
                 ) => (
+
                   <div
                     className="replyCard"
                     key={`${tone}-${index}`}
                   >
+
                     <div className="replyNumber">
                       {index + 1}
                     </div>
@@ -959,6 +1098,9 @@ export default function Home() {
                     </p>
 
                     <div className="replyActions">
+
+                      {/* COPY */}
+
                       <button
                         type="button"
                         className="copyButton"
@@ -974,6 +1116,8 @@ export default function Home() {
                           ? "✓ Copied"
                           : "📋 Copy"}
                       </button>
+
+                      {/* SHARE */}
 
                       <button
                         type="button"
@@ -994,20 +1138,28 @@ export default function Home() {
                           ? "Sharing..."
                           : "↗ Share My Reply"}
                       </button>
+
                     </div>
+
                   </div>
+
                 )
               )}
+
             </div>
 
-            {/* SHARE REPLYAI BELOW RESULTS */}
+            {/* =================================
+                SHARE PROMO
+            ================================= */}
 
             <div className="sharePromo">
+
               <div className="sharePromoIcon">
                 📢
               </div>
 
               <div>
+
                 <strong>
                   Want more replies?
                 </strong>
@@ -1019,6 +1171,7 @@ export default function Home() {
                   they open your
                   referral link.
                 </p>
+
               </div>
 
               <button
@@ -1032,24 +1185,34 @@ export default function Home() {
               >
                 Share ReplyAI
               </button>
+
             </div>
+
           </section>
         )}
+
       </section>
 
-      {/* HOW IT WORKS */}
+      {/* ======================================
+          HOW IT WORKS
+      ====================================== */}
 
       <section
         id="how"
         className="howSection"
       >
+
         <h2>
           Simple. Fast. Natural.
         </h2>
 
         <div className="steps">
+
           <div className="step">
-            <div>📸</div>
+
+            <div>
+              📸
+            </div>
 
             <h3>
               Upload
@@ -1059,10 +1222,14 @@ export default function Home() {
               Upload a screenshot
               of your conversation.
             </p>
+
           </div>
 
           <div className="step">
-            <div>🧠</div>
+
+            <div>
+              🧠
+            </div>
 
             <h3>
               AI understands
@@ -1074,10 +1241,14 @@ export default function Home() {
               understands the
               context and language.
             </p>
+
           </div>
 
           <div className="step">
-            <div>💬</div>
+
+            <div>
+              💬
+            </div>
 
             <h3>
               Get your reply
@@ -1088,14 +1259,21 @@ export default function Home() {
               and get ready-to-send
               replies.
             </p>
+
           </div>
+
         </div>
+
       </section>
 
-      {/* FOOTER */}
+      {/* ======================================
+          FOOTER
+      ====================================== */}
 
       <footer>
+
         <div className="brand footerBrand">
+
           <div className="brandIcon">
             R
           </div>
@@ -1103,6 +1281,7 @@ export default function Home() {
           <span>
             ReplyAI
           </span>
+
         </div>
 
         <p>
@@ -1112,6 +1291,7 @@ export default function Home() {
         </p>
 
         <div className="footerLinks">
+
           <a href="/about">
             About
           </a>
@@ -1135,12 +1315,15 @@ export default function Home() {
           <a href="/contact">
             Contact
           </a>
+
         </div>
 
         <div className="copyright">
           © 2026 ReplyAI. All rights reserved.
         </div>
+
       </footer>
+
     </main>
   );
 }
@@ -1149,20 +1332,25 @@ export default function Home() {
    CREATE REFERRAL CODE
 ========================================== */
 
-async function createReferralCode(type) {
-  const response = await fetch(
-    "/api/referral/create",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type":
-          "application/json",
-      },
-      body: JSON.stringify({
-        type,
-      }),
-    }
-  );
+async function createReferralCode(
+  type
+) {
+  const response =
+    await fetch(
+      "/api/referral/create",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+
+        body: JSON.stringify({
+          type,
+        }),
+      }
+    );
 
   const data =
     await response.json();
@@ -1184,16 +1372,21 @@ async function createReferralCode(type) {
 ========================================== */
 
 async function loadPromoImage() {
-  if (typeof window === "undefined") {
+  if (
+    typeof window ===
+    "undefined"
+  ) {
     return null;
   }
 
-  const response = await fetch(
-    "/replyai-promo.png",
-    {
-      cache: "no-store",
-    }
-  );
+  // Cache-busting version
+  const response =
+    await fetch(
+      `/replyai-promo.png?v=3`,
+      {
+        cache: "no-store",
+      }
+    );
 
   if (!response.ok) {
     throw new Error(
@@ -1209,7 +1402,8 @@ async function loadPromoImage() {
     "replyai-promo.png",
     {
       type:
-        blob.type || "image/png",
+        blob.type ||
+        "image/png",
     }
   );
 }
@@ -1234,21 +1428,22 @@ async function createReplyShareCard({
       "canvas"
     );
 
-  // Portrait format
-  // Perfect for WhatsApp / mobile
+  // Mobile / WhatsApp friendly portrait
   canvas.width = 1080;
   canvas.height = 1350;
 
   const ctx =
-    canvas.getContext("2d");
+    canvas.getContext(
+      "2d"
+    );
 
   if (!ctx) {
     return null;
   }
 
-  // ==========================================
-  // PREMIUM BACKGROUND
-  // ==========================================
+  /* ========================================
+     PREMIUM BACKGROUND
+  ======================================== */
 
   const gradient =
     ctx.createLinearGradient(
@@ -1283,9 +1478,9 @@ async function createReplyShareCard({
     1350
   );
 
-  // ==========================================
-  // GLOW
-  // ==========================================
+  /* ========================================
+     GLOW
+  ======================================== */
 
   drawGlow(
     ctx,
@@ -1311,9 +1506,9 @@ async function createReplyShareCard({
     "rgba(255,255,255,0.08)"
   );
 
-  // ==========================================
-  // BRAND
-  // ==========================================
+  /* ========================================
+     BRAND
+  ======================================== */
 
   ctx.textAlign =
     "left";
@@ -1342,9 +1537,9 @@ async function createReplyShareCard({
     140
   );
 
-  // ==========================================
-  // TONE BADGE
-  // ==========================================
+  /* ========================================
+     TONE BADGE
+  ======================================== */
 
   const toneEmoji = {
     Casual: "🙂",
@@ -1386,9 +1581,9 @@ async function createReplyShareCard({
     232
   );
 
-  // ==========================================
-  // INTRO
-  // ==========================================
+  /* ========================================
+     INTRO
+  ======================================== */
 
   ctx.textAlign =
     "left";
@@ -1405,9 +1600,9 @@ async function createReplyShareCard({
     340
   );
 
-  // ==========================================
-  // MAIN REPLY CARD
-  // ==========================================
+  /* ========================================
+     MAIN REPLY CARD
+  ======================================== */
 
   const cardX = 65;
   const cardY = 390;
@@ -1437,9 +1632,9 @@ async function createReplyShareCard({
 
   ctx.restore();
 
-  // ==========================================
-  // ACCENT LINE
-  // ==========================================
+  /* ========================================
+     ACCENT LINE
+  ======================================== */
 
   ctx.fillStyle =
     "#e8326b";
@@ -1453,9 +1648,9 @@ async function createReplyShareCard({
     6
   );
 
-  // ==========================================
-  // QUOTE ICON
-  // ==========================================
+  /* ========================================
+     QUOTE ICON
+  ======================================== */
 
   ctx.fillStyle =
     "rgba(216,45,99,0.10)";
@@ -1487,9 +1682,9 @@ async function createReplyShareCard({
     487
   );
 
-  // ==========================================
-  // ACTUAL GENERATED REPLY
-  // ==========================================
+  /* ========================================
+     GENERATED REPLY
+  ======================================== */
 
   ctx.fillStyle =
     "#181318";
@@ -1510,9 +1705,9 @@ async function createReplyShareCard({
     5
   );
 
-  // ==========================================
-  // TYPING DOTS
-  // ==========================================
+  /* ========================================
+     TYPING DOTS
+  ======================================== */
 
   ctx.fillStyle =
     "rgba(24,19,24,0.16)";
@@ -1533,9 +1728,9 @@ async function createReplyShareCard({
     }
   );
 
-  // ==========================================
-  // BOTTOM MESSAGE
-  // ==========================================
+  /* ========================================
+     BOTTOM MESSAGE
+  ======================================== */
 
   ctx.textAlign =
     "center";
@@ -1552,9 +1747,9 @@ async function createReplyShareCard({
     975
   );
 
-  // ==========================================
-  // CTA
-  // ==========================================
+  /* ========================================
+     CTA
+  ======================================== */
 
   ctx.fillStyle =
     "#ffffff";
@@ -1583,9 +1778,9 @@ async function createReplyShareCard({
     1105
   );
 
-  // ==========================================
-  // WEBSITE
-  // ==========================================
+  /* ========================================
+     WEBSITE
+  ======================================== */
 
   ctx.fillStyle =
     "rgba(255,255,255,0.62)";
@@ -1599,9 +1794,9 @@ async function createReplyShareCard({
     1225
   );
 
-  // ==========================================
-  // DECORATION
-  // ==========================================
+  /* ========================================
+     DECORATION
+  ======================================== */
 
   ctx.fillStyle =
     "rgba(255,255,255,0.85)";
@@ -1624,9 +1819,9 @@ async function createReplyShareCard({
     1185
   );
 
-  // ==========================================
-  // CREATE PNG
-  // ==========================================
+  /* ========================================
+     CREATE PNG
+  ======================================== */
 
   const blob =
     await new Promise(
