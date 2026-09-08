@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const tones = [
   { name: "Casual", emoji: "🙂" },
@@ -16,30 +16,138 @@ export default function Home() {
   const [preview, setPreview] = useState("");
 
   const [tone, setTone] = useState("Casual");
-
   const [replies, setReplies] = useState([]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const [copied, setCopied] = useState(null);
-
   const [readyMessage, setReadyMessage] = useState("");
 
   const [imageBase64, setImageBase64] = useState("");
-
   const [toneCache, setToneCache] = useState({});
 
-  // Number of free replies remaining
-  const [repliesRemaining, setRepliesRemaining] = useState(null);
+  // Reply balance
+  const [repliesRemaining, setRepliesRemaining] = useState(5);
+  const [balanceLoading, setBalanceLoading] = useState(true);
 
-  // Unique ID for the current screenshot upload session.
-  // Tone changes on the same upload use the same ID.
+  // Share state
+  const [sharing, setSharing] = useState(null);
+  const [shareMessage, setShareMessage] = useState("");
+
+  // Same screenshot session
   const [uploadSessionId, setUploadSessionId] = useState("");
 
   const resultsRef = useRef(null);
-
   const requestInProgress = useRef(false);
+
+  // ==========================================
+  // INITIALIZE USER / BALANCE / REFERRAL
+  // ==========================================
+
+  useEffect(() => {
+    async function initialize() {
+      try {
+        const params = new URLSearchParams(
+          window.location.search
+        );
+
+        const ref = params.get("ref");
+        const refType = params.get("type");
+
+        // --------------------------------------
+        // CLAIM REFERRAL
+        // --------------------------------------
+
+        if (ref) {
+          try {
+            const claimResponse = await fetch(
+              `/api/referral/claim?ref=${encodeURIComponent(
+                ref
+              )}&type=${encodeURIComponent(
+                refType || ""
+              )}`,
+              {
+                method: "GET",
+                cache: "no-store",
+              }
+            );
+
+            const claimData =
+              await claimResponse.json();
+
+            if (
+              claimResponse.ok &&
+              typeof claimData.repliesRemaining ===
+                "number"
+            ) {
+              setRepliesRemaining(
+                claimData.repliesRemaining
+              );
+
+              if (claimData.rewardGranted) {
+                const reward =
+                  claimData.rewardAmount || 0;
+
+                setShareMessage(
+                  `+${reward} replies added 🎉`
+                );
+
+                setTimeout(() => {
+                  setShareMessage("");
+                }, 4000);
+              }
+            }
+          } catch (refError) {
+            console.error(
+              "Referral claim error:",
+              refError
+            );
+          }
+
+          // Remove referral query from browser URL
+          window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname
+          );
+        }
+
+        // --------------------------------------
+        // LOAD CURRENT BALANCE
+        // --------------------------------------
+
+        const response = await fetch(
+          "/api/usage",
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
+
+        const data = await response.json();
+
+        if (
+          response.ok &&
+          typeof data.repliesRemaining ===
+            "number"
+        ) {
+          setRepliesRemaining(
+            data.repliesRemaining
+          );
+        }
+      } catch (err) {
+        console.error(
+          "Unable to load usage:",
+          err
+        );
+      } finally {
+        setBalanceLoading(false);
+      }
+    }
+
+    initialize();
+  }, []);
 
   // ==========================================
   // HANDLE FILE
@@ -52,6 +160,7 @@ export default function Home() {
     setReplies([]);
     setCopied(null);
     setReadyMessage("");
+    setShareMessage("");
     setTone("Casual");
     setToneCache({});
 
@@ -71,15 +180,18 @@ export default function Home() {
       setImage(file);
       setImageBase64(base64);
 
-      // New screenshot = new usage session
-      const newSessionId = crypto.randomUUID();
+      const newSessionId =
+        crypto.randomUUID();
+
       setUploadSessionId(newSessionId);
 
       if (preview) {
         URL.revokeObjectURL(preview);
       }
 
-      setPreview(URL.createObjectURL(file));
+      setPreview(
+        URL.createObjectURL(file)
+      );
     } catch (err) {
       console.error(err);
 
@@ -90,7 +202,8 @@ export default function Home() {
   }
 
   function handleInput(event) {
-    const file = event.target.files?.[0];
+    const file =
+      event.target.files?.[0];
 
     handleFile(file);
 
@@ -117,13 +230,14 @@ export default function Home() {
 
     setError("");
     setReadyMessage("");
+    setShareMessage("");
     setCopied(null);
 
     setUploadSessionId("");
   }
 
   // ==========================================
-  // SCROLL TO RESULTS
+  // SCROLL
   // ==========================================
 
   function showResults() {
@@ -139,14 +253,27 @@ export default function Home() {
   // GENERATE REPLIES
   // ==========================================
 
-  async function generateReplies(selectedTone = tone) {
+  async function generateReplies(
+    selectedTone = tone
+  ) {
     if (!image || !imageBase64) {
-      setError("Please upload a screenshot first.");
+      setError(
+        "Please upload a screenshot first."
+      );
       return;
     }
 
     if (!uploadSessionId) {
-      setError("Please upload the screenshot again.");
+      setError(
+        "Please upload the screenshot again."
+      );
+      return;
+    }
+
+    if (repliesRemaining === 0) {
+      setError(
+        "You've used all your free replies."
+      );
       return;
     }
 
@@ -155,16 +282,20 @@ export default function Home() {
     }
 
     // ========================================
-    // USE CACHE IF AVAILABLE
+    // CACHE
     // ========================================
 
     if (
       toneCache[selectedTone] &&
-      Array.isArray(toneCache[selectedTone]) &&
+      Array.isArray(
+        toneCache[selectedTone]
+      ) &&
       toneCache[selectedTone].length > 0
     ) {
       setTone(selectedTone);
-      setReplies(toneCache[selectedTone]);
+      setReplies(
+        toneCache[selectedTone]
+      );
       setError("");
 
       setReadyMessage(
@@ -188,33 +319,26 @@ export default function Home() {
       setReadyMessage("");
       setCopied(null);
 
-      // ========================================
-      // API REQUEST
-      // ========================================
+      const response = await fetch(
+        "/api/generate",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            image: imageBase64,
+            mimeType: image.type,
+            tone: selectedTone,
 
-      const response = await fetch("/api/generate", {
-        method: "POST",
+            uploadSessionId,
+          }),
+        }
+      );
 
-        headers: {
-          "Content-Type": "application/json",
-        },
-
-        body: JSON.stringify({
-          image: imageBase64,
-          mimeType: image.type,
-          tone: selectedTone,
-
-          // Same screenshot keeps same session ID.
-          // Changing tone will NOT create a new usage.
-          uploadSessionId,
-        }),
-      });
-
-      const data = await response.json();
-
-      // ========================================
-      // API ERROR
-      // ========================================
+      const data =
+        await response.json();
 
       if (!response.ok) {
         console.error(
@@ -222,19 +346,18 @@ export default function Home() {
           data
         );
 
-        if (data?.code === "NO_REPLIES_LEFT") {
+        if (
+          data?.code ===
+          "NO_REPLIES_LEFT"
+        ) {
           setRepliesRemaining(0);
         }
 
         throw new Error(
           data?.error ||
-          "Unable to generate replies. Please try again."
+            "Unable to generate replies. Please try again."
         );
       }
-
-      // ========================================
-      // VALIDATE RESPONSE
-      // ========================================
 
       if (
         !data.replies ||
@@ -245,40 +368,33 @@ export default function Home() {
         );
       }
 
-      if (data.replies.length === 0) {
+      if (
+        data.replies.length === 0
+      ) {
         throw new Error(
           "No replies were generated."
         );
       }
 
-      // ========================================
-      // UPDATE REPLY COUNT
-      // ========================================
-
       if (
-        typeof data.repliesRemaining === "number"
+        typeof data.repliesRemaining ===
+        "number"
       ) {
         setRepliesRemaining(
           data.repliesRemaining
         );
       }
 
-      // ========================================
-      // SAVE RESULT
-      // ========================================
-
       setTone(selectedTone);
-
       setReplies(data.replies);
 
-      setToneCache((previous) => ({
-        ...previous,
-        [selectedTone]: data.replies,
-      }));
-
-      // ========================================
-      // SUCCESS MESSAGE
-      // ========================================
+      setToneCache(
+        (previous) => ({
+          ...previous,
+          [selectedTone]:
+            data.replies,
+        })
+      );
 
       setReadyMessage(
         `${selectedTone} replies are ready`
@@ -289,7 +405,6 @@ export default function Home() {
       setTimeout(() => {
         setReadyMessage("");
       }, 2500);
-
     } catch (err) {
       console.error(
         "Generate error:",
@@ -298,7 +413,7 @@ export default function Home() {
 
       setError(
         err?.message ||
-        "Something went wrong. Please try again."
+          "Something went wrong. Please try again."
       );
     } finally {
       setLoading(false);
@@ -310,7 +425,9 @@ export default function Home() {
   // TONE CHANGE
   // ==========================================
 
-  async function handleToneChange(newTone) {
+  async function handleToneChange(
+    newTone
+  ) {
     if (!image || !imageBase64) {
       setError(
         "Please upload a screenshot first."
@@ -318,9 +435,7 @@ export default function Home() {
       return;
     }
 
-    if (loading) {
-      return;
-    }
+    if (loading) return;
 
     setError("");
     setTone(newTone);
@@ -332,9 +447,14 @@ export default function Home() {
   // COPY
   // ==========================================
 
-  async function copyReply(text, index) {
+  async function copyReply(
+    text,
+    index
+  ) {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(
+        text
+      );
 
       setCopied(index);
 
@@ -348,17 +468,218 @@ export default function Home() {
     }
   }
 
+  // ==========================================
+  // SHARE MY REPLY
+  // +10 REPLIES FOR REFERRAL CLICK
+  // ==========================================
+
+  async function shareReply(
+    reply,
+    index
+  ) {
+    try {
+      setSharing(`reply-${index}`);
+      setError("");
+
+      const code =
+        await createReferralCode(
+          "reply"
+        );
+
+      const shareUrl =
+        `${window.location.origin}/?ref=${encodeURIComponent(
+          code
+        )}&type=reply`;
+
+      const shareText =
+        `I got this reply with ReplyAI:\n\n"${reply}"\n\nTry ReplyAI:\n${shareUrl}`;
+
+      const imageFile =
+        await createShareCard({
+          title:
+            "My Reply from ReplyAI",
+          content: reply,
+          footer:
+            "Generated with ReplyAI",
+        });
+
+      const canShareFiles =
+        typeof navigator !==
+          "undefined" &&
+        navigator.share &&
+        navigator.canShare &&
+        imageFile &&
+        navigator.canShare({
+          files: [imageFile],
+        });
+
+      if (canShareFiles) {
+        await navigator.share({
+          files: [imageFile],
+          title:
+            "ReplyAI — My Reply",
+          text: shareText,
+          url: shareUrl,
+        });
+
+        setShareMessage(
+          "Shared! Your referral link is included."
+        );
+      } else if (
+        navigator.share
+      ) {
+        await navigator.share({
+          title:
+            "ReplyAI — My Reply",
+          text: shareText,
+          url: shareUrl,
+        });
+
+        setShareMessage(
+          "Shared! Your referral link is included."
+        );
+      } else {
+        await navigator.clipboard.writeText(
+          shareText
+        );
+
+        setShareMessage(
+          "Share text copied to clipboard."
+        );
+      }
+
+      setTimeout(() => {
+        setShareMessage("");
+      }, 4000);
+    } catch (err) {
+      if (
+        err?.name !==
+        "AbortError"
+      ) {
+        console.error(
+          "Share error:",
+          err
+        );
+
+        setError(
+          "Unable to share right now. Please try again."
+        );
+      }
+    } finally {
+      setSharing(null);
+    }
+  }
+
+  // ==========================================
+  // SHARE REPLYAI
+  // +5 REPLIES FOR REFERRAL CLICK
+  // ==========================================
+
+  async function shareReplyAI() {
+    try {
+      setSharing("site");
+      setError("");
+
+      const code =
+        await createReferralCode(
+          "site"
+        );
+
+      const shareUrl =
+        `${window.location.origin}/?ref=${encodeURIComponent(
+          code
+        )}&type=site`;
+
+      const shareText =
+        `Don't know what to reply? 😭\n\nUpload a screenshot to ReplyAI and get natural replies instantly.\n\nTry ReplyAI:\n${shareUrl}`;
+
+      const imageFile =
+        await createShareCard({
+          title:
+            "Try ReplyAI",
+          content:
+            "Don't know what to reply?\n\nUpload a screenshot and get natural replies instantly.",
+          footer:
+            "Try ReplyAI",
+        });
+
+      const canShareFiles =
+        typeof navigator !==
+          "undefined" &&
+        navigator.share &&
+        navigator.canShare &&
+        imageFile &&
+        navigator.canShare({
+          files: [imageFile],
+        });
+
+      if (canShareFiles) {
+        await navigator.share({
+          files: [imageFile],
+          title:
+            "Try ReplyAI",
+          text: shareText,
+          url: shareUrl,
+        });
+
+        setShareMessage(
+          "Shared! Your referral link is included."
+        );
+      } else if (
+        navigator.share
+      ) {
+        await navigator.share({
+          title:
+            "Try ReplyAI",
+          text: shareText,
+          url: shareUrl,
+        });
+
+        setShareMessage(
+          "Shared! Your referral link is included."
+        );
+      } else {
+        await navigator.clipboard.writeText(
+          shareText
+        );
+
+        setShareMessage(
+          "Share text copied to clipboard."
+        );
+      }
+
+      setTimeout(() => {
+        setShareMessage("");
+      }, 4000);
+    } catch (err) {
+      if (
+        err?.name !==
+        "AbortError"
+      ) {
+        console.error(
+          "Share ReplyAI error:",
+          err
+        );
+
+        setError(
+          "Unable to share right now. Please try again."
+        );
+      }
+    } finally {
+      setSharing(null);
+    }
+  }
+
+  // ==========================================
+  // UI
+  // ==========================================
+
   return (
     <main className="page">
-
-      {/* ========================================
-          NAVBAR
-      ======================================== */}
+      {/* NAVBAR */}
 
       <nav className="navbar">
-
         <div className="brand">
-
           <div className="brandIcon">
             R
           </div>
@@ -366,7 +687,6 @@ export default function Home() {
           <span>
             ReplyAI
           </span>
-
         </div>
 
         <button
@@ -382,16 +702,11 @@ export default function Home() {
         >
           How it works
         </button>
-
       </nav>
 
-
-      {/* ========================================
-          HERO
-      ======================================== */}
+      {/* HERO */}
 
       <section className="hero">
-
         <div className="badge">
           ✨ AI-powered reply assistant
         </div>
@@ -402,34 +717,58 @@ export default function Home() {
         </h1>
 
         <p className="subtitle">
-          Upload a screenshot of your conversation
-          and get natural replies in seconds.
+          Upload a screenshot of your
+          conversation and get natural
+          replies in seconds.
         </p>
 
+        {/* ====================================
+            REPLY BALANCE
+        ==================================== */}
 
-        {/* ======================================
-            REPLIES REMAINING
-        ====================================== */}
+        <div className="repliesCounter">
+          <span className="counterIcon">
+            ✨
+          </span>
 
-        {repliesRemaining !== null && (
-          <div className="repliesCounter">
-            {repliesRemaining === 1
-              ? "1 reply left"
-              : `${repliesRemaining} replies left`}
+          <div>
+            <strong>
+              {balanceLoading
+                ? "Checking..."
+                : repliesRemaining ===
+                  1
+                ? "1 reply left"
+                : `${repliesRemaining} replies left`}
+            </strong>
+
+            <small>
+              Free replies
+            </small>
           </div>
-        )}
+        </div>
 
+        {/* ====================================
+            SHARE REPLYAI
+        ==================================== */}
 
-        {/* ======================================
-            UPLOAD
-        ====================================== */}
+        <button
+          type="button"
+          className="shareSiteButton"
+          onClick={shareReplyAI}
+          disabled={
+            sharing !== null
+          }
+        >
+          {sharing === "site"
+            ? "Preparing share..."
+            : "📢 Share ReplyAI · +5 replies"}
+        </button>
+
+        {/* UPLOAD */}
 
         <div className="card">
-
           {!preview ? (
-
             <label className="uploadArea">
-
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
@@ -446,33 +785,31 @@ export default function Home() {
               </h2>
 
               <p>
-                Tap to choose an image from your phone
+                Tap to choose an image
+                from your phone
               </p>
 
               <span className="fileHint">
-                PNG, JPG, WEBP or HEIC · Max 10MB
+                PNG, JPG, WEBP or HEIC ·
+                Max 10MB
               </span>
-
             </label>
-
           ) : (
-
             <div className="previewArea">
-
               <div className="previewHeader">
-
                 <span>
                   Screenshot
                 </span>
 
                 <button
                   type="button"
-                  onClick={removeImage}
+                  onClick={
+                    removeImage
+                  }
                   className="removeButton"
                 >
                   Remove
                 </button>
-
               </div>
 
               <img
@@ -480,17 +817,11 @@ export default function Home() {
                 alt="Uploaded conversation screenshot"
                 className="previewImage"
               />
-
             </div>
-
           )}
-
         </div>
 
-
-        {/* ======================================
-            ERROR
-        ====================================== */}
+        {/* ERROR */}
 
         {error && (
           <div className="errorBox">
@@ -498,10 +829,7 @@ export default function Home() {
           </div>
         )}
 
-
-        {/* ======================================
-            SUCCESS
-        ====================================== */}
+        {/* SUCCESS */}
 
         {readyMessage && (
           <div className="successBox">
@@ -509,26 +837,31 @@ export default function Home() {
           </div>
         )}
 
+        {/* SHARE MESSAGE */}
 
-        {/* ======================================
-            TONES
-        ====================================== */}
+        {shareMessage && (
+          <div className="shareSuccessBox">
+            🎉 {shareMessage}
+          </div>
+        )}
+
+        {/* TONES */}
 
         <div className="toneSection">
-
           <div className="sectionTitle">
             Choose your vibe
           </div>
 
           <div className="toneGrid">
-
             {tones.map((item) => (
-
               <button
                 type="button"
                 key={item.name}
                 disabled={
-                  loading || !image
+                  loading ||
+                  !image ||
+                  repliesRemaining ===
+                    0
                 }
                 onClick={() =>
                   handleToneChange(
@@ -541,25 +874,17 @@ export default function Home() {
                     : ""
                 }`}
               >
-
                 <span>
                   {item.emoji}
                 </span>
 
                 {item.name}
-
               </button>
-
             ))}
-
           </div>
-
         </div>
 
-
-        {/* ======================================
-            GENERATE
-        ====================================== */}
+        {/* GENERATE */}
 
         <button
           type="button"
@@ -573,51 +898,57 @@ export default function Home() {
             repliesRemaining === 0
           }
         >
-
           {loading ? (
-
             <>
               <span className="spinner"></span>
-              Understanding screenshot...
+              Understanding
+              screenshot...
             </>
-
           ) : (
-
             <>
               ✨ Generate Replies
             </>
-
           )}
-
         </button>
 
-
-        {/* ======================================
-            NO REPLIES MESSAGE
-        ====================================== */}
+        {/* NO REPLIES */}
 
         {repliesRemaining === 0 && (
           <div className="noRepliesBox">
-            You've used all your free replies.
+            <strong>
+              You've used all your
+              free replies.
+            </strong>
+
+            <span>
+              Share ReplyAI to earn
+              more replies.
+            </span>
+
+            <button
+              type="button"
+              onClick={
+                shareReplyAI
+              }
+              disabled={
+                sharing !== null
+              }
+            >
+              📢 Share ReplyAI ·
+              +5
+            </button>
           </div>
         )}
 
-
-        {/* ======================================
-            RESULTS
-        ====================================== */}
+        {/* RESULTS */}
 
         {replies.length > 0 && (
-
           <section
             ref={resultsRef}
             className="results"
           >
-
             <div className="resultsHeader">
-
               <div>
-
                 <h2>
                   Suggested Replies
                 </h2>
@@ -628,22 +959,19 @@ export default function Home() {
                     {tone}
                   </strong>
                 </p>
-
               </div>
-
             </div>
 
-
             <div className="replyList">
-
               {replies.map(
-                (reply, index) => (
-
+                (
+                  reply,
+                  index
+                ) => (
                   <div
                     className="replyCard"
                     key={`${tone}-${index}`}
                   >
-
                     <div className="replyNumber">
                       {index + 1}
                     </div>
@@ -652,57 +980,98 @@ export default function Home() {
                       {reply}
                     </p>
 
-                    <button
-                      type="button"
-                      className="copyButton"
-                      onClick={() =>
-                        copyReply(
-                          reply,
-                          index
-                        )
-                      }
-                    >
+                    <div className="replyActions">
+                      <button
+                        type="button"
+                        className="copyButton"
+                        onClick={() =>
+                          copyReply(
+                            reply,
+                            index
+                          )
+                        }
+                      >
+                        {copied ===
+                        index
+                          ? "✓ Copied"
+                          : "Copy"}
+                      </button>
 
-                      {copied === index
-                        ? "✓ Copied"
-                        : "Copy"}
-
-                    </button>
-
+                      <button
+                        type="button"
+                        className="shareReplyButton"
+                        onClick={() =>
+                          shareReply(
+                            reply,
+                            index
+                          )
+                        }
+                        disabled={
+                          sharing !==
+                          null
+                        }
+                      >
+                        {sharing ===
+                        `reply-${index}`
+                          ? "Sharing..."
+                          : "↗ Share My Reply · +10"}
+                      </button>
+                    </div>
                   </div>
-
                 )
               )}
-
             </div>
 
+            {/* SHARE REPLYAI BELOW RESULTS */}
+
+            <div className="sharePromo">
+              <div className="sharePromoIcon">
+                📢
+              </div>
+
+              <div>
+                <strong>
+                  Want more replies?
+                </strong>
+
+                <p>
+                  Share ReplyAI with
+                  someone and earn
+                  +5 replies when
+                  they open your
+                  referral link.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={
+                  shareReplyAI
+                }
+                disabled={
+                  sharing !== null
+                }
+              >
+                Share ReplyAI
+              </button>
+            </div>
           </section>
-
         )}
-
       </section>
 
-
-      {/* ========================================
-          HOW IT WORKS
-      ======================================== */}
+      {/* HOW IT WORKS */}
 
       <section
         id="how"
         className="howSection"
       >
-
         <h2>
           Simple. Fast. Natural.
         </h2>
 
         <div className="steps">
-
           <div className="step">
-
-            <div>
-              📸
-            </div>
+            <div>📸</div>
 
             <h3>
               Upload
@@ -712,59 +1081,43 @@ export default function Home() {
               Upload a screenshot
               of your conversation.
             </p>
-
           </div>
 
-
           <div className="step">
-
-            <div>
-              🧠
-            </div>
+            <div>🧠</div>
 
             <h3>
               AI understands
             </h3>
 
             <p>
-              AI reads the conversation
-              and understands the context
-              and language.
+              AI reads the
+              conversation and
+              understands the
+              context and language.
             </p>
-
           </div>
 
-
           <div className="step">
-
-            <div>
-              💬
-            </div>
+            <div>💬</div>
 
             <h3>
               Get your reply
             </h3>
 
             <p>
-              Choose your vibe and get
-              ready-to-send replies.
+              Choose your vibe
+              and get ready-to-send
+              replies.
             </p>
-
           </div>
-
         </div>
-
       </section>
 
-
-      {/* ========================================
-          FOOTER
-      ======================================== */}
+      {/* FOOTER */}
 
       <footer>
-
         <div className="brand footerBrand">
-
           <div className="brandIcon">
             R
           </div>
@@ -772,16 +1125,15 @@ export default function Home() {
           <span>
             ReplyAI
           </span>
-
         </div>
 
         <p>
-          Your screenshot is processed temporarily
-          to generate replies.
+          Your screenshot is processed
+          temporarily to generate
+          replies.
         </p>
 
         <div className="footerLinks">
-
           <a href="/about">
             About
           </a>
@@ -805,73 +1157,460 @@ export default function Home() {
           <a href="/contact">
             Contact
           </a>
-
         </div>
 
         <div className="copyright">
           © 2026 ReplyAI. All rights reserved.
         </div>
-
       </footer>
-
     </main>
   );
 }
 
+/* ==========================================
+   CREATE REFERRAL CODE
+========================================== */
+
+async function createReferralCode(
+  type
+) {
+  const response =
+    await fetch(
+      "/api/referral/create",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+        body: JSON.stringify({
+          type,
+        }),
+      }
+    );
+
+  const data =
+    await response.json();
+
+  if (
+    !response.ok ||
+    !data.code
+  ) {
+    throw new Error(
+      "Unable to create referral link."
+    );
+  }
+
+  return data.code;
+}
+
+/* ==========================================
+   CREATE BEAUTIFUL SHARE CARD
+========================================== */
+
+async function createShareCard({
+  title,
+  content,
+  footer,
+}) {
+  if (
+    typeof document ===
+    "undefined"
+  ) {
+    return null;
+  }
+
+  const canvas =
+    document.createElement(
+      "canvas"
+    );
+
+  canvas.width = 1200;
+  canvas.height = 630;
+
+  const ctx =
+    canvas.getContext("2d");
+
+  if (!ctx) {
+    return null;
+  }
+
+  // Background
+  const gradient =
+    ctx.createLinearGradient(
+      0,
+      0,
+      1200,
+      630
+    );
+
+  gradient.addColorStop(
+    0,
+    "#8f1239"
+  );
+
+  gradient.addColorStop(
+    1,
+    "#c72c55"
+  );
+
+  ctx.fillStyle =
+    gradient;
+
+  ctx.fillRect(
+    0,
+    0,
+    1200,
+    630
+  );
+
+  // White card
+  ctx.fillStyle =
+    "#ffffff";
+
+  roundRect(
+    ctx,
+    70,
+    65,
+    1060,
+    500,
+    34
+  );
+
+  // Logo
+  ctx.fillStyle =
+    "#9b1c3d";
+
+  ctx.beginPath();
+  ctx.arc(
+    135,
+    135,
+    38,
+    0,
+    Math.PI * 2
+  );
+  ctx.fill();
+
+  ctx.fillStyle =
+    "#ffffff";
+
+  ctx.font =
+    "700 34px Arial";
+
+  ctx.textAlign =
+    "center";
+
+  ctx.fillText(
+    "R",
+    135,
+    147
+  );
+
+  // Brand
+  ctx.fillStyle =
+    "#171717";
+
+  ctx.textAlign =
+    "left";
+
+  ctx.font =
+    "700 34px Arial";
+
+  ctx.fillText(
+    "ReplyAI",
+    195,
+    147
+  );
+
+  // Title
+  ctx.fillStyle =
+    "#777777";
+
+  ctx.font =
+    "600 24px Arial";
+
+  ctx.fillText(
+    title,
+    120,
+    215
+  );
+
+  // Content
+  ctx.fillStyle =
+    "#151515";
+
+  ctx.font =
+    "700 38px Arial";
+
+  drawWrappedText(
+    ctx,
+    content,
+    120,
+    285,
+    960,
+    52,
+    5
+  );
+
+  // Footer
+  ctx.fillStyle =
+    "#9b1c3d";
+
+  ctx.font =
+    "600 22px Arial";
+
+  ctx.fillText(
+    footer,
+    120,
+    505
+  );
+
+  // Website
+  ctx.fillStyle =
+    "#777777";
+
+  ctx.font =
+    "500 18px Arial";
+
+  ctx.fillText(
+    window.location.hostname,
+    120,
+    535
+  );
+
+  const blob =
+    await new Promise(
+      (resolve) =>
+        canvas.toBlob(
+          resolve,
+          "image/png",
+          0.95
+        )
+    );
+
+  if (!blob) {
+    return null;
+  }
+
+  return new File(
+    [blob],
+    "replyai-share.png",
+    {
+      type: "image/png",
+    }
+  );
+}
+
+/* ==========================================
+   CANVAS HELPERS
+========================================== */
+
+function roundRect(
+  ctx,
+  x,
+  y,
+  width,
+  height,
+  radius
+) {
+  ctx.beginPath();
+
+  ctx.moveTo(
+    x + radius,
+    y
+  );
+
+  ctx.lineTo(
+    x + width - radius,
+    y
+  );
+
+  ctx.quadraticCurveTo(
+    x + width,
+    y,
+    x + width,
+    y + radius
+  );
+
+  ctx.lineTo(
+    x + width,
+    y + height - radius
+  );
+
+  ctx.quadraticCurveTo(
+    x + width,
+    y + height,
+    x + width - radius,
+    y + height
+  );
+
+  ctx.lineTo(
+    x + radius,
+    y + height
+  );
+
+  ctx.quadraticCurveTo(
+    x,
+    y + height,
+    x,
+    y + height - radius
+  );
+
+  ctx.lineTo(
+    x,
+    y + radius
+  );
+
+  ctx.quadraticCurveTo(
+    x,
+    y,
+    x + radius,
+    y
+  );
+
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawWrappedText(
+  ctx,
+  text,
+  x,
+  y,
+  maxWidth,
+  lineHeight,
+  maxLines
+) {
+  const words =
+    String(text).split(
+      /\s+/
+    );
+
+  let line = "";
+  let lineCount = 0;
+
+  for (
+    let i = 0;
+    i < words.length;
+    i++
+  ) {
+    const testLine =
+      line +
+      (line ? " " : "") +
+      words[i];
+
+    const metrics =
+      ctx.measureText(
+        testLine
+      );
+
+    if (
+      metrics.width >
+        maxWidth &&
+      line
+    ) {
+      ctx.fillText(
+        line,
+        x,
+        y
+      );
+
+      lineCount++;
+
+      if (
+        lineCount >=
+        maxLines
+      ) {
+        return;
+      }
+
+      line =
+        words[i];
+
+      y +=
+        lineHeight;
+    } else {
+      line =
+        testLine;
+    }
+  }
+
+  if (
+    line &&
+    lineCount <
+      maxLines
+  ) {
+    ctx.fillText(
+      line,
+      x,
+      y
+    );
+  }
+}
 
 /* ==========================================
    FILE → BASE64
-   ========================================== */
+========================================== */
 
-function fileToBase64(file) {
+function fileToBase64(
+  file
+) {
   return new Promise(
     (resolve, reject) => {
-
       const reader =
         new FileReader();
 
-      reader.onload = () => {
+      reader.onload =
+        () => {
+          const result =
+            reader.result;
 
-        const result =
-          reader.result;
+          if (
+            typeof result !==
+            "string"
+          ) {
+            reject(
+              new Error(
+                "Unable to read image."
+              )
+            );
 
-        if (
-          typeof result !== "string"
-        ) {
+            return;
+          }
+
+          const parts =
+            result.split(",");
+
+          if (
+            parts.length <
+            2
+          ) {
+            reject(
+              new Error(
+                "Invalid image data."
+              )
+            );
+
+            return;
+          }
+
+          resolve(
+            parts[1]
+          );
+        };
+
+      reader.onerror =
+        () => {
           reject(
             new Error(
               "Unable to read image."
             )
           );
+        };
 
-          return;
-        }
-
-        const parts =
-          result.split(",");
-
-        if (parts.length < 2) {
-          reject(
-            new Error(
-              "Invalid image data."
-            )
-          );
-
-          return;
-        }
-
-        resolve(parts[1]);
-      };
-
-      reader.onerror = () => {
-        reject(
-          new Error(
-            "Unable to read image."
-          )
-        );
-      };
-
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(
+        file
+      );
     }
   );
 }
