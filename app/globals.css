@@ -634,3 +634,19 @@ footer p {
     text-align: center;
   }
 }
+.errorBox {
+  margin-top: 16px;
+  padding: 14px 16px;
+
+  background: #fff1f1;
+  border: 1px solid #ffd0d0;
+
+  color: #b42318;
+
+  border-radius: 14px;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  text-align: left;
+}
