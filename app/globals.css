@@ -18,6 +18,9 @@ body {
 
   background: #fafafa;
   color: #111111;
+
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -29,11 +32,23 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
 .page {
   min-height: 100vh;
 }
 
-/* NAVBAR */
+
+/* =========================================================
+   NAVBAR
+   ========================================================= */
 
 .navbar {
   width: 100%;
@@ -45,7 +60,7 @@ button {
 
   padding: 0 6%;
 
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.94);
 
   border-bottom: 1px solid #eeeeee;
 
@@ -54,11 +69,13 @@ button {
   z-index: 20;
 
   backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
 }
 
 .brand {
   display: flex;
   align-items: center;
+
   gap: 10px;
 
   font-size: 20px;
@@ -83,15 +100,30 @@ button {
 
 .navButton {
   border: none;
+
   background: transparent;
 
-  color: #555;
+  color: #555555;
 
   font-size: 14px;
   font-weight: 600;
+
+  padding: 8px 4px;
+
+  transition:
+    color 0.2s ease,
+    transform 0.2s ease;
 }
 
-/* HERO */
+.navButton:hover {
+  color: #111111;
+  transform: translateY(-1px);
+}
+
+
+/* =========================================================
+   HERO
+   ========================================================= */
 
 .hero {
   max-width: 820px;
@@ -105,6 +137,7 @@ button {
 
 .badge {
   display: inline-flex;
+  align-items: center;
 
   padding: 8px 14px;
 
@@ -137,14 +170,17 @@ button {
 
   margin: 24px auto 40px;
 
-  color: #666;
+  color: #666666;
 
   font-size: 18px;
 
   line-height: 1.6;
 }
 
-/* CARD */
+
+/* =========================================================
+   UPLOAD CARD
+   ========================================================= */
 
 .card {
   width: 100%;
@@ -180,12 +216,19 @@ button {
 
   cursor: pointer;
 
-  transition: 0.2s;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
 }
 
 .uploadArea:hover {
-  border-color: #999;
+  border-color: #999999;
   background: #fafafa;
+}
+
+.uploadArea:active {
+  transform: scale(0.995);
 }
 
 .uploadIcon {
@@ -201,7 +244,7 @@ button {
 }
 
 .uploadArea p {
-  color: #777;
+  color: #777777;
 
   font-size: 14px;
 }
@@ -209,12 +252,15 @@ button {
 .fileHint {
   margin-top: 12px;
 
-  color: #aaa;
+  color: #aaaaaa;
 
   font-size: 12px;
 }
 
-/* PREVIEW */
+
+/* =========================================================
+   PREVIEW
+   ========================================================= */
 
 .previewArea {
   padding: 8px;
@@ -244,6 +290,18 @@ button {
   font-size: 12px;
 
   font-weight: 700;
+
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.removeButton:hover {
+  background: #e8e8e8;
+}
+
+.removeButton:active {
+  transform: scale(0.96);
 }
 
 .previewImage {
@@ -260,7 +318,76 @@ button {
   background: #f4f4f4;
 }
 
-/* TONE */
+
+/* =========================================================
+   ERROR
+   ========================================================= */
+
+.errorBox {
+  margin-top: 16px;
+
+  padding: 14px 16px;
+
+  background: #fff1f1;
+
+  border: 1px solid #ffd0d0;
+
+  color: #b42318;
+
+  border-radius: 14px;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  line-height: 1.45;
+
+  text-align: left;
+}
+
+
+/* =========================================================
+   SUCCESS MESSAGE
+   ========================================================= */
+
+.successBox {
+  margin-top: 16px;
+
+  padding: 14px 16px;
+
+  background: #f0fff4;
+
+  border: 1px solid #c6f6d5;
+
+  color: #18794e;
+
+  border-radius: 14px;
+
+  font-size: 14px;
+  font-weight: 700;
+
+  line-height: 1.45;
+
+  text-align: center;
+
+  animation: successAppear 0.25s ease;
+}
+
+@keyframes successAppear {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+
+/* =========================================================
+   TONE SECTION
+   ========================================================= */
 
 .toneSection {
   margin-top: 30px;
@@ -289,9 +416,13 @@ button {
 
   background: white;
 
+  color: #111111;
+
   border-radius: 14px;
 
   padding: 13px 8px;
+
+  min-height: 48px;
 
   display: flex;
 
@@ -304,21 +435,39 @@ button {
 
   font-weight: 700;
 
-  transition: 0.2s;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease,
+    transform 0.15s ease;
 }
 
-.toneButton:hover {
-  border-color: #999;
+.toneButton:hover:not(:disabled) {
+  border-color: #999999;
+
+  transform: translateY(-1px);
+}
+
+.toneButton:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .toneButton.active {
   background: #111111;
+
   color: white;
 
   border-color: #111111;
 }
 
-/* GENERATE */
+.toneButton:disabled {
+  opacity: 0.65;
+}
+
+
+/* =========================================================
+   GENERATE BUTTON
+   ========================================================= */
 
 .generateButton {
   width: 100%;
@@ -335,17 +484,26 @@ button {
 
   padding: 17px;
 
+  min-height: 54px;
+
   font-size: 16px;
 
   font-weight: 800;
 
-  transition: 0.2s;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease,
+    opacity 0.2s ease;
 }
 
-.generateButton:hover {
+.generateButton:hover:not(:disabled) {
   transform: translateY(-1px);
 
-  background: #222;
+  background: #222222;
+}
+
+.generateButton:active:not(:disabled) {
+  transform: scale(0.99);
 }
 
 .generateButton:disabled {
@@ -354,13 +512,16 @@ button {
   cursor: wait;
 }
 
-/* SPINNER */
+
+/* =========================================================
+   SPINNER
+   ========================================================= */
 
 .spinner {
   width: 17px;
   height: 17px;
 
-  border: 2px solid rgba(255,255,255,0.3);
+  border: 2px solid rgba(255, 255, 255, 0.3);
 
   border-top-color: white;
 
@@ -381,24 +542,64 @@ button {
   }
 }
 
-/* RESULTS */
+
+/* =========================================================
+   RESULTS
+   ========================================================= */
 
 .results {
   margin-top: 50px;
 
   text-align: left;
+
+  /*
+    Important for mobile:
+    When JavaScript automatically scrolls to this section,
+    the sticky navbar won't cover the heading.
+  */
+  scroll-margin-top: 90px;
+
+  animation: resultsAppear 0.35s ease;
+}
+
+@keyframes resultsAppear {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.resultsHeader {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  margin-bottom: 4px;
 }
 
 .resultsHeader h2 {
   font-size: 25px;
 
   margin-bottom: 5px;
+
+  letter-spacing: -0.5px;
 }
 
 .resultsHeader p {
-  color: #777;
+  color: #777777;
 
   font-size: 13px;
+}
+
+.resultsHeader strong {
+  color: #111111;
 }
 
 .replyList {
@@ -427,6 +628,9 @@ button {
   border: 1px solid #e7e7e7;
 
   border-radius: 18px;
+
+  box-shadow:
+    0 8px 25px rgba(0, 0, 0, 0.03);
 }
 
 .replyNumber {
@@ -451,12 +655,14 @@ button {
   font-size: 15px;
 
   line-height: 1.5;
+
+  word-break: break-word;
 }
 
 .copyButton {
   border: none;
 
-  background: #111;
+  background: #111111;
 
   color: white;
 
@@ -467,9 +673,26 @@ button {
   font-size: 12px;
 
   font-weight: 700;
+
+  white-space: nowrap;
+
+  transition:
+    background 0.2s ease,
+    transform 0.15s ease;
 }
 
-/* HOW */
+.copyButton:hover {
+  background: #222222;
+}
+
+.copyButton:active {
+  transform: scale(0.96);
+}
+
+
+/* =========================================================
+   HOW IT WORKS
+   ========================================================= */
 
 .howSection {
   max-width: 1000px;
@@ -518,48 +741,133 @@ button {
 }
 
 .step p {
-  color: #777;
+  color: #777777;
 
   font-size: 14px;
 
   line-height: 1.5;
 }
 
-/* FOOTER */
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
 
 footer {
+  width: 100%;
+
   border-top: 1px solid #eeeeee;
 
-  padding: 35px 20px;
+  padding: 48px 20px 32px;
 
   display: flex;
 
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
 
-  max-width: 1000px;
+  align-items: center;
+
+  justify-content: center;
+
+  gap: 18px;
+
+  text-align: center;
+
+  background: #ffffff;
 
   margin: 0 auto;
 }
 
-footer p {
-  color: #888;
-
-  font-size: 13px;
-}
-
 .footerBrand {
-  font-size: 16px;
+  font-size: 18px;
+
+  margin-bottom: 2px;
 }
 
 .footerBrand .brandIcon {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
 
-  border-radius: 9px;
+  border-radius: 10px;
 }
 
-/* MOBILE */
+footer > p {
+  max-width: 520px;
+
+  color: #888888;
+
+  font-size: 13px;
+
+  line-height: 1.6;
+
+  margin: 0 auto;
+}
+
+
+/* FOOTER LINKS */
+
+.footerLinks {
+  width: 100%;
+
+  max-width: 760px;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  flex-wrap: wrap;
+
+  gap: 10px 22px;
+
+  margin-top: 6px;
+}
+
+.footerLinks a {
+  color: #555555;
+
+  font-size: 13px;
+
+  font-weight: 600;
+
+  padding: 5px 0;
+
+  transition:
+    color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.footerLinks a:hover {
+  color: #111111;
+
+  transform: translateY(-1px);
+}
+
+
+/* COPYRIGHT */
+
+.copyright {
+  width: 100%;
+
+  max-width: 760px;
+
+  padding-top: 20px;
+
+  margin-top: 4px;
+
+  border-top: 1px solid #eeeeee;
+
+  color: #888888;
+
+  font-size: 12px;
+
+  line-height: 1.5;
+}
+
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
 
 @media (max-width: 650px) {
 
@@ -576,11 +884,16 @@ footer p {
   .brandIcon {
     width: 34px;
     height: 34px;
+
+    border-radius: 10px;
   }
 
   .navButton {
     display: none;
   }
+
+
+  /* HERO */
 
   .hero {
     padding: 55px 16px 45px;
@@ -596,57 +909,207 @@ footer p {
     font-size: 16px;
 
     margin-top: 18px;
+
+    margin-bottom: 32px;
   }
+
+
+  /* CARD */
 
   .card {
     border-radius: 22px;
+
+    padding: 10px;
   }
 
   .uploadArea {
     min-height: 240px;
+
+    padding: 32px 16px;
+  }
+
+  .uploadArea h2 {
+    font-size: 19px;
+  }
+
+
+  /* TONES */
+
+  .toneSection {
+    margin-top: 26px;
   }
 
   .toneGrid {
     grid-template-columns: repeat(2, 1fr);
+
+    gap: 10px;
+  }
+
+  .toneButton {
+    min-height: 54px;
+
+    padding: 12px 7px;
+
+    border-radius: 14px;
+
+    font-size: 14px;
+  }
+
+
+  /* GENERATE */
+
+  .generateButton {
+    margin-top: 20px;
+
+    padding: 17px 14px;
+
+    min-height: 56px;
+
+    font-size: 16px;
+  }
+
+
+  /* RESULTS */
+
+  .results {
+    margin-top: 38px;
+
+    scroll-margin-top: 78px;
+  }
+
+  .resultsHeader h2 {
+    font-size: 24px;
+  }
+
+  .replyList {
+    gap: 10px;
+
+    margin-top: 16px;
   }
 
   .replyCard {
     grid-template-columns: 30px 1fr;
 
     align-items: start;
+
+    gap: 12px;
+
+    padding: 16px;
+
+    border-radius: 16px;
+  }
+
+  .replyNumber {
+    width: 30px;
+    height: 30px;
+  }
+
+  .replyCard p {
+    font-size: 15px;
+
+    padding-top: 5px;
   }
 
   .copyButton {
     grid-column: 2;
 
     justify-self: start;
+
+    margin-top: 2px;
+  }
+
+
+  /* HOW IT WORKS */
+
+  .howSection {
+    padding: 55px 16px;
+  }
+
+  .howSection > h2 {
+    font-size: 30px;
+
+    margin-bottom: 28px;
   }
 
   .steps {
     grid-template-columns: 1fr;
+
+    gap: 14px;
   }
+
+  .step {
+    padding: 28px 20px;
+
+    border-radius: 20px;
+  }
+
+
+  /* FOOTER */
 
   footer {
-    flex-direction: column;
+    padding: 42px 18px 28px;
 
-    gap: 12px;
+    gap: 16px;
+  }
 
-    text-align: center;
+  .footerBrand {
+    font-size: 18px;
+  }
+
+  footer > p {
+    max-width: 330px;
+
+    font-size: 13px;
+  }
+
+  .footerLinks {
+    max-width: 360px;
+
+    gap: 8px 18px;
+
+    margin-top: 4px;
+  }
+
+  .footerLinks a {
+    font-size: 13px;
+
+    padding: 5px 0;
+  }
+
+  .copyright {
+    max-width: 360px;
+
+    padding-top: 18px;
+
+    font-size: 12px;
   }
 }
-.errorBox {
-  margin-top: 16px;
-  padding: 14px 16px;
 
-  background: #fff1f1;
-  border: 1px solid #ffd0d0;
 
-  color: #b42318;
+/* =========================================================
+   VERY SMALL PHONES
+   ========================================================= */
 
-  border-radius: 14px;
+@media (max-width: 380px) {
 
-  font-size: 14px;
-  font-weight: 600;
+  .hero {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
 
-  text-align: left;
+  .hero h1 {
+    font-size: 43px;
+  }
+
+  .toneButton {
+    font-size: 13px;
+  }
+
+  .replyCard {
+    padding: 14px;
+  }
+
+  .footerLinks {
+    gap: 7px 14px;
+  }
 }
