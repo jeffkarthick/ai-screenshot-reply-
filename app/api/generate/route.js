@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { redis } from "@/lib/upstash";
+import { redis } from "../../../lib/upstash";
 import crypto from "crypto";
 
 export const runtime = "nodejs";
