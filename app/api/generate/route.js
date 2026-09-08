@@ -2,15 +2,12 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-export async function POST(req: Request) {
+export async function POST(req) {
   try {
     const body = await req.json();
 
     const { image, mimeType, tone } = body;
 
-    // -----------------------------
-    // Validate image
-    // -----------------------------
     if (!image || typeof image !== "string") {
       return NextResponse.json(
         { error: "Screenshot is required." },
@@ -18,9 +15,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // -----------------------------
-    // Check API key
-    // -----------------------------
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
@@ -32,19 +26,13 @@ export async function POST(req: Request) {
       );
     }
 
-    // -----------------------------
-    // Clean base64 image
-    // -----------------------------
+    // Remove data:image/...;base64, prefix if present
     let base64Image = image;
 
-    // If frontend sends:
-    // data:image/jpeg;base64,XXXX
-    // remove the prefix.
     if (base64Image.includes(",")) {
       base64Image = base64Image.split(",")[1];
     }
 
-    // Remove accidental whitespace/newlines
     base64Image = base64Image.replace(/\s/g, "");
 
     if (!base64Image) {
@@ -54,9 +42,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // -----------------------------
-    // Safe MIME type
-    // -----------------------------
     const allowedMimeTypes = [
       "image/jpeg",
       "image/png",
@@ -69,9 +54,6 @@ export async function POST(req: Request) {
       ? mimeType
       : "image/jpeg";
 
-    // -----------------------------
-    // Prompt
-    // -----------------------------
     const selectedTone =
       typeof tone === "string" && tone.trim()
         ? tone.trim()
@@ -82,7 +64,7 @@ You are ReplyAI, an expert messaging reply assistant.
 
 Analyze the provided conversation screenshot carefully.
 
-Your job is to understand:
+Understand:
 - What the other person said
 - The conversation context
 - The emotional tone
@@ -115,9 +97,6 @@ Required JSON format:
 }
 `;
 
-    // -----------------------------
-    // Gemini API
-    // -----------------------------
     const response = await fetch(
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
       {
@@ -143,7 +122,6 @@ Required JSON format:
               ],
             },
           ],
-
           generationConfig: {
             responseMimeType: "application/json",
           },
@@ -151,9 +129,6 @@ Required JSON format:
       }
     );
 
-    // -----------------------------
-    // Gemini error
-    // -----------------------------
     if (!response.ok) {
       const errorText = await response.text();
 
@@ -166,25 +141,17 @@ Required JSON format:
       return NextResponse.json(
         {
           error: "AI could not analyze the screenshot.",
-          details:
-            process.env.NODE_ENV === "development"
-              ? errorText
-              : undefined,
         },
         { status: 500 }
       );
     }
 
-    // -----------------------------
-    // Parse Gemini response
-    // -----------------------------
     const data = await response.json();
 
-    const text =
-      data?.candidates?.[0]?.content?.parts
-        ?.map((part: any) => part?.text || "")
-        .join("")
-        .trim();
+    const text = data?.candidates?.[0]?.content?.parts
+      ?.map((part) => part?.text || "")
+      .join("")
+      .trim();
 
     if (!text) {
       console.error("Empty Gemini response:", data);
@@ -195,10 +162,7 @@ Required JSON format:
       );
     }
 
-    // -----------------------------
-    // Parse JSON
-    // -----------------------------
-    let parsed: any;
+    let parsed;
 
     try {
       parsed = JSON.parse(text);
@@ -211,13 +175,7 @@ Required JSON format:
       );
     }
 
-    // -----------------------------
-    // Validate replies
-    // -----------------------------
-    if (
-      !parsed ||
-      !Array.isArray(parsed.replies)
-    ) {
+    if (!parsed || !Array.isArray(parsed.replies)) {
       console.error("Invalid replies structure:", parsed);
 
       return NextResponse.json(
@@ -228,7 +186,7 @@ Required JSON format:
 
     const replies = parsed.replies
       .filter(
-        (reply: unknown) =>
+        (reply) =>
           typeof reply === "string" &&
           reply.trim().length > 0
       )
@@ -241,9 +199,6 @@ Required JSON format:
       );
     }
 
-    // -----------------------------
-    // Success
-    // -----------------------------
     return NextResponse.json({
       replies,
     });
