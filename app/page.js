@@ -1393,7 +1393,7 @@ async function loadPromoImage() {
 
   return new File(
     [blob],
-    "replyai-share.png",
+    "replyai-share.png", 
     {
       type: blob.type || "image/png",
     }
