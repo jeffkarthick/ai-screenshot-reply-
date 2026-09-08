@@ -11,36 +11,36 @@ const tones = [
   { name: "Confident", emoji: "😎" }
 ];
 
-const demoReplies = [
-  "Haha yeah, I get what you mean 😄",
-  "Fair enough 😂 What happened then?",
-  "Yeah, that makes sense. Tell me more."
-];
-
 export default function Home() {
   const [image, setImage] = useState(null);
   const [preview, setPreview] = useState("");
   const [tone, setTone] = useState("Casual");
+
   const [replies, setReplies] = useState([]);
+
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
   const [copied, setCopied] = useState(null);
 
   function handleFile(file) {
     if (!file) return;
 
+    setError("");
+    setReplies([]);
+
     if (!file.type.startsWith("image/")) {
-      alert("Please upload an image file.");
+      setError("Please upload an image file.");
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      alert("Image must be smaller than 10MB.");
+      setError("Image must be smaller than 10MB.");
       return;
     }
 
     setImage(file);
     setPreview(URL.createObjectURL(file));
-    setReplies([]);
   }
 
   function handleInput(event) {
@@ -52,35 +52,73 @@ export default function Home() {
     setImage(null);
     setPreview("");
     setReplies([]);
+    setError("");
   }
 
   async function generateReplies() {
     if (!image) {
-      alert("Please upload a screenshot first.");
+      setError("Please upload a screenshot first.");
       return;
     }
 
-    setLoading(true);
-    setReplies([]);
+    try {
+      setLoading(true);
+      setError("");
+      setReplies([]);
 
-    // Demo response for the first version.
-    // Real AI API will be connected in the next step.
-    setTimeout(() => {
-      setReplies(demoReplies);
+      const base64 = await fileToBase64(image);
+
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          image: base64,
+          mimeType: image.type,
+          tone
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.error || "Unable to generate replies."
+        );
+      }
+
+      if (!data.replies || !Array.isArray(data.replies)) {
+        throw new Error("AI returned an invalid response.");
+      }
+
+      setReplies(data.replies);
+
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err?.message ||
+        "Something went wrong. Please try again."
+      );
+
+    } finally {
       setLoading(false);
-    }, 1200);
+    }
   }
 
   async function copyReply(text, index) {
     try {
       await navigator.clipboard.writeText(text);
+
       setCopied(index);
 
       setTimeout(() => {
         setCopied(null);
       }, 1500);
+
     } catch {
-      alert("Unable to copy the reply.");
+      setError("Unable to copy the reply.");
     }
   }
 
@@ -88,18 +126,39 @@ export default function Home() {
     <main className="page">
 
       {/* NAVBAR */}
+
       <nav className="navbar">
+
         <div className="brand">
-          <div className="brandIcon">R</div>
-          <span>ReplyAI</span>
+
+          <div className="brandIcon">
+            R
+          </div>
+
+          <span>
+            ReplyAI
+          </span>
+
         </div>
 
-        <button className="navButton">
+        <button
+          className="navButton"
+          onClick={() =>
+            document
+              .getElementById("how")
+              ?.scrollIntoView({
+                behavior: "smooth"
+              })
+          }
+        >
           How it works
         </button>
+
       </nav>
 
+
       {/* HERO */}
+
       <section className="hero">
 
         <div className="badge">
@@ -112,19 +171,22 @@ export default function Home() {
         </h1>
 
         <p className="subtitle">
-          Upload a screenshot of your conversation and get
-          natural replies in seconds.
+          Upload a screenshot of your conversation
+          and get natural replies in seconds.
         </p>
 
+
         {/* UPLOAD CARD */}
+
         <div className="card">
 
           {!preview ? (
+
             <label className="uploadArea">
 
               <input
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/webp"
                 onChange={handleInput}
                 hidden
               />
@@ -146,11 +208,16 @@ export default function Home() {
               </span>
 
             </label>
+
           ) : (
+
             <div className="previewArea">
 
               <div className="previewHeader">
-                <span>Screenshot</span>
+
+                <span>
+                  Screenshot
+                </span>
 
                 <button
                   onClick={removeImage}
@@ -158,6 +225,7 @@ export default function Home() {
                 >
                   Remove
                 </button>
+
               </div>
 
               <img
@@ -167,11 +235,23 @@ export default function Home() {
               />
 
             </div>
+
           )}
 
         </div>
 
+
+        {/* ERROR */}
+
+        {error && (
+          <div className="errorBox">
+            {error}
+          </div>
+        )}
+
+
         {/* TONE */}
+
         <div className="toneSection">
 
           <div className="sectionTitle">
@@ -181,88 +261,140 @@ export default function Home() {
           <div className="toneGrid">
 
             {tones.map((item) => (
+
               <button
                 key={item.name}
-                onClick={() => setTone(item.name)}
+                onClick={() =>
+                  setTone(item.name)
+                }
                 className={`toneButton ${
-                  tone === item.name ? "active" : ""
+                  tone === item.name
+                    ? "active"
+                    : ""
                 }`}
               >
-                <span>{item.emoji}</span>
+
+                <span>
+                  {item.emoji}
+                </span>
+
                 {item.name}
+
               </button>
+
             ))}
 
           </div>
 
         </div>
 
-        {/* GENERATE */}
+
+        {/* GENERATE BUTTON */}
+
         <button
           className="generateButton"
           onClick={generateReplies}
-          disabled={loading}
+          disabled={loading || !image}
         >
+
           {loading ? (
+
             <>
               <span className="spinner"></span>
-              Thinking...
+              Understanding screenshot...
             </>
+
           ) : (
+
             <>
               ✨ Generate Replies
             </>
+
           )}
+
         </button>
 
+
         {/* RESULTS */}
+
         {replies.length > 0 && (
+
           <section className="results">
 
             <div className="resultsHeader">
+
               <div>
-                <h2>Suggested Replies</h2>
+
+                <h2>
+                  Suggested Replies
+                </h2>
+
                 <p>
-                  Tone: <strong>{tone}</strong>
+                  Tone:{" "}
+                  <strong>
+                    {tone}
+                  </strong>
                 </p>
+
               </div>
+
             </div>
+
 
             <div className="replyList">
 
-              {replies.map((reply, index) => (
-                <div
-                  className="replyCard"
-                  key={index}
-                >
+              {replies.map(
+                (reply, index) => (
 
-                  <div className="replyNumber">
-                    {index + 1}
+                  <div
+                    className="replyCard"
+                    key={index}
+                  >
+
+                    <div className="replyNumber">
+                      {index + 1}
+                    </div>
+
+                    <p>
+                      {reply}
+                    </p>
+
+                    <button
+                      className="copyButton"
+                      onClick={() =>
+                        copyReply(
+                          reply,
+                          index
+                        )
+                      }
+                    >
+
+                      {copied === index
+                        ? "✓ Copied"
+                        : "Copy"}
+
+                    </button>
+
                   </div>
 
-                  <p>
-                    {reply}
-                  </p>
-
-                  <button
-                    className="copyButton"
-                    onClick={() => copyReply(reply, index)}
-                  >
-                    {copied === index ? "✓ Copied" : "Copy"}
-                  </button>
-
-                </div>
-              ))}
+                )
+              )}
 
             </div>
 
           </section>
+
         )}
 
       </section>
 
+
       {/* HOW IT WORKS */}
-      <section className="howSection">
+
+      <section
+        id="how"
+        className="howSection"
+      >
 
         <h2>
           Simple. Fast. Natural.
@@ -271,45 +403,138 @@ export default function Home() {
         <div className="steps">
 
           <div className="step">
-            <div>📸</div>
-            <h3>Upload</h3>
+
+            <div>
+              📸
+            </div>
+
+            <h3>
+              Upload
+            </h3>
+
             <p>
-              Upload a screenshot of the conversation.
+              Upload a screenshot
+              of your conversation.
             </p>
+
           </div>
 
-          <div className="step">
-            <div>🧠</div>
-            <h3>AI understands</h3>
-            <p>
-              AI reads the conversation and understands the context.
-            </p>
-          </div>
 
           <div className="step">
-            <div>💬</div>
-            <h3>Get your reply</h3>
+
+            <div>
+              🧠
+            </div>
+
+            <h3>
+              AI understands
+            </h3>
+
             <p>
-              Choose your vibe and get ready-to-send replies.
+              AI reads the conversation
+              and understands the context.
             </p>
+
+          </div>
+
+
+          <div className="step">
+
+            <div>
+              💬
+            </div>
+
+            <h3>
+              Get your reply
+            </h3>
+
+            <p>
+              Choose your vibe and get
+              ready-to-send replies.
+            </p>
+
           </div>
 
         </div>
 
       </section>
 
+
       {/* FOOTER */}
+
       <footer>
+
         <div className="brand footerBrand">
-          <div className="brandIcon">R</div>
-          <span>ReplyAI</span>
+
+          <div className="brandIcon">
+            R
+          </div>
+
+          <span>
+            ReplyAI
+          </span>
+
         </div>
 
         <p>
-          Your conversations stay private.
+          Your screenshot is processed
+          securely.
         </p>
+
       </footer>
 
     </main>
+  );
+}
+
+
+/* Convert uploaded image to base64 */
+
+function fileToBase64(file) {
+  return new Promise(
+    (resolve, reject) => {
+
+      const reader = new FileReader();
+
+      reader.onload = () => {
+
+        const result = reader.result;
+
+        if (typeof result !== "string") {
+          reject(
+            new Error(
+              "Unable to read image."
+            )
+          );
+
+          return;
+        }
+
+        /*
+          FileReader returns:
+
+          data:image/jpeg;base64,AAAA...
+
+          Gemini expects only:
+
+          AAAA...
+        */
+
+        const base64 =
+          result.split(",")[1];
+
+        resolve(base64);
+      };
+
+      reader.onerror = () => {
+        reject(
+          new Error(
+            "Unable to read image."
+          )
+        );
+      };
+
+      reader.readAsDataURL(file);
+    }
   );
 }
