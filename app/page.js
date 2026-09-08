@@ -26,17 +26,19 @@ export default function Home() {
 
   const [readyMessage, setReadyMessage] = useState("");
 
-  // Store base64 so we don't convert the same
-  // screenshot again every time a tone changes.
   const [imageBase64, setImageBase64] = useState("");
 
-  // Store generated replies per tone.
   const [toneCache, setToneCache] = useState({});
 
-  // Used to automatically scroll to results.
+  // Number of free replies remaining
+  const [repliesRemaining, setRepliesRemaining] = useState(null);
+
+  // Unique ID for the current screenshot upload session.
+  // Tone changes on the same upload use the same ID.
+  const [uploadSessionId, setUploadSessionId] = useState("");
+
   const resultsRef = useRef(null);
 
-  // Prevent duplicate requests.
   const requestInProgress = useRef(false);
 
   // ==========================================
@@ -69,12 +71,15 @@ export default function Home() {
       setImage(file);
       setImageBase64(base64);
 
+      // New screenshot = new usage session
+      const newSessionId = crypto.randomUUID();
+      setUploadSessionId(newSessionId);
+
       if (preview) {
         URL.revokeObjectURL(preview);
       }
 
       setPreview(URL.createObjectURL(file));
-
     } catch (err) {
       console.error(err);
 
@@ -89,7 +94,6 @@ export default function Home() {
 
     handleFile(file);
 
-    // Allows selecting the same image again.
     event.target.value = "";
   }
 
@@ -114,6 +118,8 @@ export default function Home() {
     setError("");
     setReadyMessage("");
     setCopied(null);
+
+    setUploadSessionId("");
   }
 
   // ==========================================
@@ -139,7 +145,11 @@ export default function Home() {
       return;
     }
 
-    // Don't allow duplicate requests.
+    if (!uploadSessionId) {
+      setError("Please upload the screenshot again.");
+      return;
+    }
+
     if (requestInProgress.current) {
       return;
     }
@@ -182,22 +192,23 @@ export default function Home() {
       // API REQUEST
       // ========================================
 
-      const response = await fetch(
-        "/api/generate",
-        {
-          method: "POST",
+      const response = await fetch("/api/generate", {
+        method: "POST",
 
-          headers: {
-            "Content-Type": "application/json",
-          },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-          body: JSON.stringify({
-            image: imageBase64,
-            mimeType: image.type,
-            tone: selectedTone,
-          }),
-        }
-      );
+        body: JSON.stringify({
+          image: imageBase64,
+          mimeType: image.type,
+          tone: selectedTone,
+
+          // Same screenshot keeps same session ID.
+          // Changing tone will NOT create a new usage.
+          uploadSessionId,
+        }),
+      });
 
       const data = await response.json();
 
@@ -211,10 +222,14 @@ export default function Home() {
           data
         );
 
+        if (data?.code === "NO_REPLIES_LEFT") {
+          setRepliesRemaining(0);
+        }
+
         throw new Error(
-  data?.error ||
-  "Unable to generate replies. Please try again."
-);
+          data?.error ||
+          "Unable to generate replies. Please try again."
+        );
       }
 
       // ========================================
@@ -237,6 +252,18 @@ export default function Home() {
       }
 
       // ========================================
+      // UPDATE REPLY COUNT
+      // ========================================
+
+      if (
+        typeof data.repliesRemaining === "number"
+      ) {
+        setRepliesRemaining(
+          data.repliesRemaining
+        );
+      }
+
+      // ========================================
       // SAVE RESULT
       // ========================================
 
@@ -244,7 +271,6 @@ export default function Home() {
 
       setReplies(data.replies);
 
-      // Cache this tone.
       setToneCache((previous) => ({
         ...previous,
         [selectedTone]: data.replies,
@@ -257,10 +283,6 @@ export default function Home() {
       setReadyMessage(
         `${selectedTone} replies are ready`
       );
-
-      // ========================================
-      // AUTO SCROLL
-      // ========================================
 
       showResults();
 
@@ -278,7 +300,6 @@ export default function Home() {
         err?.message ||
         "Something went wrong. Please try again."
       );
-
     } finally {
       setLoading(false);
       requestInProgress.current = false;
@@ -320,7 +341,6 @@ export default function Home() {
       setTimeout(() => {
         setCopied(null);
       }, 1500);
-
     } catch {
       setError(
         "Unable to copy the reply."
@@ -385,6 +405,19 @@ export default function Home() {
           Upload a screenshot of your conversation
           and get natural replies in seconds.
         </p>
+
+
+        {/* ======================================
+            REPLIES REMAINING
+        ====================================== */}
+
+        {repliesRemaining !== null && (
+          <div className="repliesCounter">
+            {repliesRemaining === 1
+              ? "1 reply left"
+              : `${repliesRemaining} replies left`}
+          </div>
+        )}
 
 
         {/* ======================================
@@ -535,7 +568,9 @@ export default function Home() {
             generateReplies(tone)
           }
           disabled={
-            loading || !image
+            loading ||
+            !image ||
+            repliesRemaining === 0
           }
         >
 
@@ -555,6 +590,17 @@ export default function Home() {
           )}
 
         </button>
+
+
+        {/* ======================================
+            NO REPLIES MESSAGE
+        ====================================== */}
+
+        {repliesRemaining === 0 && (
+          <div className="noRepliesBox">
+            You've used all your free replies.
+          </div>
+        )}
 
 
         {/* ======================================
