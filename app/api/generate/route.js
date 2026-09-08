@@ -2,63 +2,181 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
+// ============================================================
+// MODELS
+// ============================================================
+
+const MODELS = [
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-2.5-flash",
+];
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function isTemporaryError(status, errorText = "") {
+  const text = String(errorText).toLowerCase();
+
+  return (
+    status === 429 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504 ||
+    text.includes("high demand") ||
+    text.includes("unavailable") ||
+    text.includes("temporarily")
+  );
+}
+
+async function callGemini({
+  model,
+  apiKey,
+  prompt,
+  base64Image,
+  mimeType,
+}) {
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/` +
+    `${model}:generateContent`;
+
+  const response = await fetch(url, {
+    method: "POST",
+
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
+
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+
+          parts: [
+            {
+              text: prompt,
+            },
+
+            {
+              inlineData: {
+                mimeType,
+                data: base64Image,
+              },
+            },
+          ],
+        },
+      ],
+
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.8,
+      },
+    }),
+  });
+
+  const text = await response.text();
+
+  return {
+    response,
+    text,
+  };
+}
+
+// ============================================================
+// POST
+// ============================================================
+
 export async function POST(req) {
   try {
     const body = await req.json();
 
-    const { image, mimeType, tone } = body;
+    const {
+      image,
+      mimeType,
+      tone,
+    } = body;
 
-    // ==========================================
-    // 1. Validate screenshot
-    // ==========================================
-    if (!image || typeof image !== "string") {
+    // ========================================================
+    // 1. IMAGE VALIDATION
+    // ========================================================
+
+    if (
+      !image ||
+      typeof image !== "string"
+    ) {
       return NextResponse.json(
         {
-          error: "Screenshot is required.",
+          error:
+            "Screenshot is required.",
         },
         { status: 400 }
       );
     }
 
-    // ==========================================
-    // 2. Check Gemini API key
-    // ==========================================
-    const apiKey = process.env.GEMINI_API_KEY;
+    // ========================================================
+    // 2. API KEY
+    // ========================================================
+
+    const apiKey =
+      process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-      console.error("GEMINI_API_KEY is missing.");
+      console.error(
+        "GEMINI_API_KEY is missing."
+      );
 
       return NextResponse.json(
         {
-          error: "AI service is not configured.",
+          error:
+            "AI service is not configured.",
         },
         { status: 500 }
       );
     }
 
-    // ==========================================
-    // 3. Clean Base64 image
-    // ==========================================
+    // ========================================================
+    // 3. BASE64 CLEANUP
+    // ========================================================
+
     let base64Image = image;
 
+    // Supports:
+    // data:image/jpeg;base64,XXXX
     if (base64Image.includes(",")) {
-      base64Image = base64Image.split(",")[1];
+      base64Image =
+        base64Image.split(",")[1];
     }
 
-    base64Image = base64Image.replace(/\s/g, "");
+    base64Image =
+      base64Image.replace(
+        /\s/g,
+        ""
+      );
 
     if (!base64Image) {
       return NextResponse.json(
         {
-          error: "Invalid screenshot data.",
+          error:
+            "Invalid screenshot data.",
         },
         { status: 400 }
       );
     }
 
-    // ==========================================
-    // 4. MIME type
-    // ==========================================
+    // ========================================================
+    // 4. MIME TYPE
+    // ========================================================
+
     const allowedMimeTypes = [
       "image/jpeg",
       "image/png",
@@ -67,21 +185,27 @@ export async function POST(req) {
       "image/heif",
     ];
 
-    const finalMimeType = allowedMimeTypes.includes(mimeType)
-      ? mimeType
-      : "image/jpeg";
+    const finalMimeType =
+      allowedMimeTypes.includes(
+        mimeType
+      )
+        ? mimeType
+        : "image/jpeg";
 
-    // ==========================================
-    // 5. Selected tone
-    // ==========================================
+    // ========================================================
+    // 5. TONE
+    // ========================================================
+
     const selectedTone =
-      typeof tone === "string" && tone.trim()
+      typeof tone === "string" &&
+      tone.trim()
         ? tone.trim()
         : "Casual";
 
-    // ==========================================
-    // 6. Language-aware prompt
-    // ==========================================
+    // ========================================================
+    // 6. PROMPT
+    // ========================================================
+
     const prompt = `
 You are ReplyAI, an expert messaging reply assistant.
 
@@ -91,19 +215,19 @@ Your job is to understand the conversation and generate exactly 3 natural replie
 
 IMPORTANT LANGUAGE RULE:
 
-The replies MUST be written in the SAME LANGUAGE, SCRIPT, AND WRITING STYLE used by the person who is being replied to.
+The replies MUST use the SAME LANGUAGE, SCRIPT, AND WRITING STYLE used in the conversation.
 
-DO NOT automatically write the replies in English.
+Do NOT automatically reply in English.
 
-First carefully identify the language and writing style of the latest relevant incoming message in the screenshot.
+Detect the language of the latest relevant incoming message.
 
-Possible examples include:
+Possible languages/styles include:
 
 - English
 - Tamil
-- Tanglish (Tamil written using English/Latin letters)
+- Tanglish
 - Malayalam
-- Manglish (Malayalam written using English/Latin letters)
+- Manglish
 - Hindi
 - Hinglish
 - Telugu
@@ -113,107 +237,70 @@ Possible examples include:
 - Any other language
 - Mixed languages
 
-LANGUAGE MATCHING RULES:
+LANGUAGE RULES:
 
-1. If the conversation is in Tamil script, reply in Tamil script.
+1. Tamil script -> Tamil script.
+2. Tanglish -> Tanglish.
+3. Malayalam script -> Malayalam script.
+4. Manglish -> Manglish.
+5. Hindi -> Hindi.
+6. Hinglish -> Hinglish.
+7. English -> English.
+8. Mixed language -> preserve the same mix.
+9. Match slang and casual spelling.
+10. Match emojis when appropriate.
+11. Do not translate the conversation into English.
+12. Do not change Tanglish into Tamil script.
+13. Do not change Malayalam into English.
+14. Do not change Manglish into Malayalam script.
+15. Website language must NOT affect reply language.
 
-Example:
-Incoming:
-"என்ன பண்ற?"
-
-Reply:
-"ஒன்னும் இல்ல, நீ என்ன பண்ற?"
-
-2. If the conversation is Tanglish, reply in Tanglish.
-
-Example:
-Incoming:
-"enna panra?"
-
-Reply:
-"onnum illa, nee enna panra?"
-
-3. If the conversation is Malayalam script, reply in Malayalam script.
-
-4. If the conversation is Manglish, reply in Manglish.
-
-5. If the conversation mixes Tamil and English, preserve the same Tamil-English mix.
-
-Example:
-Incoming:
-"office mudichitiya?"
-
-Reply:
-"illa, innum konjam work iruku"
-
-6. If the conversation is Hindi, reply in Hindi.
-
-7. If the conversation is Hinglish, reply in Hinglish.
-
-8. If the conversation is English, reply in English.
-
-9. If the conversation uses slang, abbreviations, casual spelling, emojis, or short forms, naturally match that style.
-
-10. DO NOT translate the conversation into English before replying.
-
-11. DO NOT change Tamil into English.
-
-12. DO NOT change Tanglish into Tamil script.
-
-13. DO NOT change Malayalam into English.
-
-14. DO NOT change Manglish into Malayalam script.
-
-15. The language of the website UI has NO influence on the reply language.
-
-16. The selected tone also has NO influence on the reply language.
-
-The conversation language is more important than the language of this instruction.
+The conversation's language is more important than this instruction's language.
 
 SELECTED TONE:
 ${selectedTone}
 
-CONVERSATION UNDERSTANDING:
+UNDERSTAND:
 
-Carefully determine:
 - What the other person said
-- Who is being replied to
-- The latest relevant incoming message
-- The emotional context
-- The intention of the message
-- The natural way a real person would respond
+- Who should be replied to
+- The latest relevant message
+- Conversation context
+- Emotional tone
+- Intent
+- Natural response style
 
 REPLY RULES:
 
 - Generate exactly 3 replies.
-- Replies must sound natural and human.
-- Keep them reasonably short.
+- Keep replies reasonably short.
+- Make them sound human.
 - Match the selected tone.
-- Match the conversation's language.
-- Match the conversation's script.
-- Match the conversation's slang/style.
+- Match the language.
+- Match the script.
+- Match the slang/style.
 - Do not mention AI.
 - Do not mention the screenshot.
-- Do not invent information that is not visible.
+- Do not invent information.
+- Do not explain your reasoning.
 - Do not translate the message.
-- Do not add explanations.
-- Each reply should be different.
+- Each reply must be different.
 
 VERY IMPORTANT:
 
-If the latest message is Tanglish, ALL 3 replies must be Tanglish.
+If the conversation is Tanglish, ALL 3 replies must be Tanglish.
 
-If the latest message is Tamil script, ALL 3 replies must be Tamil script.
+If the conversation is Tamil script, ALL 3 replies must be Tamil script.
 
-If the latest message is Malayalam, ALL 3 replies must be Malayalam.
+If the conversation is Malayalam, ALL 3 replies must be Malayalam.
 
-If the latest message is Manglish, ALL 3 replies must be Manglish.
+If the conversation is Manglish, ALL 3 replies must be Manglish.
 
-If the latest message is English, ALL 3 replies must be English.
+If the conversation is English, ALL 3 replies must be English.
 
 Return ONLY valid JSON.
 
-Required format:
+FORMAT:
 
 {
   "replies": [
@@ -224,160 +311,216 @@ Required format:
 }
 `;
 
-    // ==========================================
-    // 7. Gemini API
-    // ==========================================
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
-      {
-        method: "POST",
+    // ========================================================
+    // 7. TRY MODELS
+    // ========================================================
 
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
+    let lastError = "";
 
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
+    for (
+      let modelIndex = 0;
+      modelIndex < MODELS.length;
+      modelIndex++
+    ) {
+      const model =
+        MODELS[modelIndex];
 
-              parts: [
-                {
-                  text: prompt,
-                },
+      // ------------------------------------------------------
+      // Retry current model once for temporary overload
+      // ------------------------------------------------------
 
-                {
-                  inlineData: {
-                    mimeType: finalMimeType,
-                    data: base64Image,
-                  },
-                },
-              ],
-            },
-          ],
+      for (
+        let attempt = 0;
+        attempt < 2;
+        attempt++
+      ) {
+        try {
+          console.log(
+            `Trying Gemini model: ${model}, attempt: ${
+              attempt + 1
+            }`
+          );
 
-          generationConfig: {
-            responseMimeType: "application/json",
-          },
-        }),
+          const result =
+            await callGemini({
+              model,
+              apiKey,
+              prompt,
+              base64Image,
+              mimeType:
+                finalMimeType,
+            });
+
+          const {
+            response,
+            text,
+          } = result;
+
+          // ==================================================
+          // SUCCESS
+          // ==================================================
+
+          if (response.ok) {
+            let data;
+
+            try {
+              data = JSON.parse(text);
+            } catch {
+              lastError =
+                "Gemini returned invalid JSON.";
+
+              break;
+            }
+
+            const generatedText =
+              data
+                ?.candidates?.[0]
+                ?.content?.parts
+                ?.map(
+                  (part) =>
+                    part?.text || ""
+                )
+                .join("")
+                .trim();
+
+            if (!generatedText) {
+              lastError =
+                "AI returned an empty response.";
+
+              break;
+            }
+
+            let parsed;
+
+            try {
+              parsed =
+                JSON.parse(
+                  generatedText
+                );
+            } catch {
+              console.error(
+                "Invalid generated JSON:",
+                generatedText
+              );
+
+              lastError =
+                "AI returned an invalid response.";
+
+              break;
+            }
+
+            if (
+              !parsed ||
+              !Array.isArray(
+                parsed.replies
+              )
+            ) {
+              lastError =
+                "AI returned an invalid reply format.";
+
+              break;
+            }
+
+            const replies =
+              parsed.replies
+                .filter(
+                  (reply) =>
+                    typeof reply ===
+                      "string" &&
+                    reply.trim()
+                      .length > 0
+                )
+                .map((reply) =>
+                  reply.trim()
+                )
+                .slice(0, 3);
+
+            if (
+              replies.length === 0
+            ) {
+              lastError =
+                "No replies were generated.";
+
+              break;
+            }
+
+            console.log(
+              `Gemini success using ${model}`
+            );
+
+            return NextResponse.json({
+              replies,
+            });
+          }
+
+          // ==================================================
+          // API ERROR
+          // ==================================================
+
+          lastError = text;
+
+          console.error(
+            `Gemini ${model} error:`,
+            response.status,
+            text
+          );
+
+          // If temporary error:
+          // retry once, then move to next model.
+          if (
+            isTemporaryError(
+              response.status,
+              text
+            )
+          ) {
+            if (attempt === 0) {
+              await sleep(700);
+              continue;
+            }
+
+            break;
+          }
+
+          // Non-temporary error:
+          // do not blindly retry the same model.
+          break;
+
+        } catch (error) {
+          console.error(
+            `Gemini ${model} request failed:`,
+            error
+          );
+
+          lastError =
+            error?.message ||
+            "Gemini request failed.";
+
+          if (attempt === 0) {
+            await sleep(700);
+            continue;
+          }
+
+          break;
+        }
       }
+    }
+
+    // ========================================================
+    // 8. ALL MODELS FAILED
+    // ========================================================
+
+    console.error(
+      "All Gemini models failed:",
+      lastError
     );
 
-    // ==========================================
-    // 8. Gemini API error
-    // ==========================================
-    if (!response.ok) {
-      const errorText = await response.text();
-
-      console.error(
-        "Gemini API error:",
-        response.status,
-        errorText
-      );
-
-      return NextResponse.json(
-        {
-          error: "AI could not analyze the screenshot.",
-          details: errorText,
-        },
-        { status: 500 }
-      );
-    }
-
-    // ==========================================
-    // 9. Read response
-    // ==========================================
-    const data = await response.json();
-
-    const text = data?.candidates?.[0]?.content?.parts
-      ?.map((part) => part?.text || "")
-      .join("")
-      .trim();
-
-    if (!text) {
-      console.error(
-        "Gemini returned empty response:",
-        JSON.stringify(data, null, 2)
-      );
-
-      return NextResponse.json(
-        {
-          error: "AI returned an empty response.",
-        },
-        { status: 500 }
-      );
-    }
-
-    // ==========================================
-    // 10. Parse JSON
-    // ==========================================
-    let parsed;
-
-    try {
-      parsed = JSON.parse(text);
-    } catch (error) {
-      console.error(
-        "Gemini returned invalid JSON:",
-        text
-      );
-
-      return NextResponse.json(
-        {
-          error: "AI returned an invalid response.",
-          details: text,
-        },
-        { status: 500 }
-      );
-    }
-
-    // ==========================================
-    // 11. Validate replies
-    // ==========================================
-    if (
-      !parsed ||
-      !Array.isArray(parsed.replies)
-    ) {
-      console.error(
-        "Invalid replies structure:",
-        parsed
-      );
-
-      return NextResponse.json(
-        {
-          error: "AI returned an invalid reply format.",
-        },
-        { status: 500 }
-      );
-    }
-
-    // ==========================================
-    // 12. Clean replies
-    // ==========================================
-    const replies = parsed.replies
-      .filter(
-        (reply) =>
-          typeof reply === "string" &&
-          reply.trim().length > 0
-      )
-      .map((reply) => reply.trim())
-      .slice(0, 3);
-
-    if (replies.length === 0) {
-      return NextResponse.json(
-        {
-          error: "No replies were generated.",
-        },
-        { status: 500 }
-      );
-    }
-
-    // ==========================================
-    // 13. Success
-    // ==========================================
-    return NextResponse.json({
-      replies,
-    });
+    return NextResponse.json(
+      {
+        error:
+          "AI is temporarily busy. Please try again in a few seconds.",
+      },
+      { status: 503 }
+    );
 
   } catch (error) {
     console.error(
@@ -387,7 +530,8 @@ Required format:
 
     return NextResponse.json(
       {
-        error: "Something went wrong.",
+        error:
+          "Something went wrong. Please try again.",
       },
       { status: 500 }
     );
