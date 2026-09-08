@@ -41,14 +41,10 @@ export async function POST(req) {
     // ==========================================
     let base64Image = image;
 
-    // Handles:
-    // data:image/jpeg;base64,XXXX
-    // data:image/png;base64,XXXX
     if (base64Image.includes(",")) {
       base64Image = base64Image.split(",")[1];
     }
 
-    // Remove spaces/newlines
     base64Image = base64Image.replace(/\s/g, "");
 
     if (!base64Image) {
@@ -61,7 +57,7 @@ export async function POST(req) {
     }
 
     // ==========================================
-    // 4. Validate MIME type
+    // 4. MIME type
     // ==========================================
     const allowedMimeTypes = [
       "image/jpeg",
@@ -76,7 +72,7 @@ export async function POST(req) {
       : "image/jpeg";
 
     // ==========================================
-    // 5. Tone
+    // 5. Selected tone
     // ==========================================
     const selectedTone =
       typeof tone === "string" && tone.trim()
@@ -84,38 +80,140 @@ export async function POST(req) {
         : "Casual";
 
     // ==========================================
-    // 6. AI Prompt
+    // 6. Language-aware prompt
     // ==========================================
     const prompt = `
 You are ReplyAI, an expert messaging reply assistant.
 
-Analyze the provided conversation screenshot carefully.
+You are given a screenshot of a real conversation.
 
-Understand:
+Your job is to understand the conversation and generate exactly 3 natural replies.
 
-- What the other person said
-- The conversation context
-- The emotional tone
-- The likely intention
-- What kind of response would naturally fit
+IMPORTANT LANGUAGE RULE:
 
-Selected tone:
+The replies MUST be written in the SAME LANGUAGE, SCRIPT, AND WRITING STYLE used by the person who is being replied to.
+
+DO NOT automatically write the replies in English.
+
+First carefully identify the language and writing style of the latest relevant incoming message in the screenshot.
+
+Possible examples include:
+
+- English
+- Tamil
+- Tanglish (Tamil written using English/Latin letters)
+- Malayalam
+- Manglish (Malayalam written using English/Latin letters)
+- Hindi
+- Hinglish
+- Telugu
+- Kannada
+- Bengali
+- Marathi
+- Any other language
+- Mixed languages
+
+LANGUAGE MATCHING RULES:
+
+1. If the conversation is in Tamil script, reply in Tamil script.
+
+Example:
+Incoming:
+"என்ன பண்ற?"
+
+Reply:
+"ஒன்னும் இல்ல, நீ என்ன பண்ற?"
+
+2. If the conversation is Tanglish, reply in Tanglish.
+
+Example:
+Incoming:
+"enna panra?"
+
+Reply:
+"onnum illa, nee enna panra?"
+
+3. If the conversation is Malayalam script, reply in Malayalam script.
+
+4. If the conversation is Manglish, reply in Manglish.
+
+5. If the conversation mixes Tamil and English, preserve the same Tamil-English mix.
+
+Example:
+Incoming:
+"office mudichitiya?"
+
+Reply:
+"illa, innum konjam work iruku"
+
+6. If the conversation is Hindi, reply in Hindi.
+
+7. If the conversation is Hinglish, reply in Hinglish.
+
+8. If the conversation is English, reply in English.
+
+9. If the conversation uses slang, abbreviations, casual spelling, emojis, or short forms, naturally match that style.
+
+10. DO NOT translate the conversation into English before replying.
+
+11. DO NOT change Tamil into English.
+
+12. DO NOT change Tanglish into Tamil script.
+
+13. DO NOT change Malayalam into English.
+
+14. DO NOT change Manglish into Malayalam script.
+
+15. The language of the website UI has NO influence on the reply language.
+
+16. The selected tone also has NO influence on the reply language.
+
+The conversation language is more important than the language of this instruction.
+
+SELECTED TONE:
 ${selectedTone}
 
-Generate exactly 3 possible replies.
+CONVERSATION UNDERSTANDING:
 
-Rules:
+Carefully determine:
+- What the other person said
+- Who is being replied to
+- The latest relevant incoming message
+- The emotional context
+- The intention of the message
+- The natural way a real person would respond
 
+REPLY RULES:
+
+- Generate exactly 3 replies.
 - Replies must sound natural and human.
-- Do not mention AI.
-- Do not mention this screenshot.
-- Do not invent information that is not visible.
-- Keep replies reasonably short.
+- Keep them reasonably short.
 - Match the selected tone.
+- Match the conversation's language.
+- Match the conversation's script.
+- Match the conversation's slang/style.
+- Do not mention AI.
+- Do not mention the screenshot.
+- Do not invent information that is not visible.
+- Do not translate the message.
+- Do not add explanations.
 - Each reply should be different.
-- Return ONLY valid JSON.
 
-Required JSON format:
+VERY IMPORTANT:
+
+If the latest message is Tanglish, ALL 3 replies must be Tanglish.
+
+If the latest message is Tamil script, ALL 3 replies must be Tamil script.
+
+If the latest message is Malayalam, ALL 3 replies must be Malayalam.
+
+If the latest message is Manglish, ALL 3 replies must be Manglish.
+
+If the latest message is English, ALL 3 replies must be English.
+
+Return ONLY valid JSON.
+
+Required format:
 
 {
   "replies": [
@@ -127,7 +225,7 @@ Required JSON format:
 `;
 
     // ==========================================
-    // 7. Call Gemini
+    // 7. Gemini API
     // ==========================================
     const response = await fetch(
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
@@ -188,7 +286,7 @@ Required JSON format:
     }
 
     // ==========================================
-    // 9. Read Gemini response
+    // 9. Read response
     // ==========================================
     const data = await response.json();
 
