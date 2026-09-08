@@ -8,7 +8,7 @@ const tones = [
   { name: "Romantic", emoji: "❤️" },
   { name: "Professional", emoji: "💼" },
   { name: "Polite", emoji: "🙏" },
-  { name: "Confident", emoji: "😎" }
+  { name: "Confident", emoji: "😎" },
 ];
 
 export default function Home() {
@@ -23,11 +23,16 @@ export default function Home() {
 
   const [copied, setCopied] = useState(null);
 
+  // ==========================================
+  // HANDLE FILE
+  // ==========================================
+
   function handleFile(file) {
     if (!file) return;
 
     setError("");
     setReplies([]);
+    setCopied(null);
 
     if (!file.type.startsWith("image/")) {
       setError("Please upload an image file.");
@@ -39,23 +44,46 @@ export default function Home() {
       return;
     }
 
+    // Revoke old preview if one exists
+    if (preview) {
+      URL.revokeObjectURL(preview);
+    }
+
     setImage(file);
     setPreview(URL.createObjectURL(file));
   }
 
   function handleInput(event) {
     const file = event.target.files?.[0];
+
     handleFile(file);
+
+    // Allow selecting the same image again
+    event.target.value = "";
   }
 
+  // ==========================================
+  // REMOVE IMAGE
+  // ==========================================
+
   function removeImage() {
+    if (preview) {
+      URL.revokeObjectURL(preview);
+    }
+
     setImage(null);
     setPreview("");
     setReplies([]);
     setError("");
+    setCopied(null);
+    setTone("Casual");
   }
 
-  async function generateReplies() {
+  // ==========================================
+  // GENERATE REPLIES
+  // ==========================================
+
+  async function generateReplies(selectedTone = tone) {
     if (!image) {
       setError("Please upload a screenshot first.");
       return;
@@ -64,48 +92,91 @@ export default function Home() {
     try {
       setLoading(true);
       setError("");
-      setReplies([]);
+      setCopied(null);
+
+      // IMPORTANT:
+      // Do NOT clear previous replies here.
+      // This keeps the UI stable while changing tone.
 
       const base64 = await fileToBase64(image);
 
       const response = await fetch("/api/generate", {
         method: "POST",
+
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
+
         body: JSON.stringify({
           image: base64,
           mimeType: image.type,
-          tone
-        })
+          tone: selectedTone,
+        }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
+        console.error("Generate API error:", data);
+
         throw new Error(
-          data?.error || "Unable to generate replies."
+          data?.error ||
+            "Unable to generate replies."
         );
       }
 
-      if (!data.replies || !Array.isArray(data.replies)) {
-        throw new Error("AI returned an invalid response.");
+      if (
+        !data.replies ||
+        !Array.isArray(data.replies)
+      ) {
+        throw new Error(
+          "AI returned an invalid response."
+        );
+      }
+
+      if (data.replies.length === 0) {
+        throw new Error(
+          "No replies were generated."
+        );
       }
 
       setReplies(data.replies);
+      setTone(selectedTone);
 
     } catch (err) {
-      console.error(err);
+      console.error("Generate error:", err);
 
       setError(
         err?.message ||
-        "Something went wrong. Please try again."
+          "Something went wrong. Please try again."
       );
-
     } finally {
       setLoading(false);
     }
   }
+
+  // ==========================================
+  // TONE CHANGE
+  // ==========================================
+
+  async function handleToneChange(newTone) {
+    if (!image) {
+      setTone(newTone);
+      setError("Please upload a screenshot first.");
+      return;
+    }
+
+    // Change selected tone immediately
+    setTone(newTone);
+
+    // Automatically regenerate using
+    // the SAME uploaded screenshot.
+    await generateReplies(newTone);
+  }
+
+  // ==========================================
+  // COPY REPLY
+  // ==========================================
 
   async function copyReply(text, index) {
     try {
@@ -116,7 +187,6 @@ export default function Home() {
       setTimeout(() => {
         setCopied(null);
       }, 1500);
-
     } catch {
       setError("Unable to copy the reply.");
     }
@@ -125,12 +195,13 @@ export default function Home() {
   return (
     <main className="page">
 
-      {/* NAVBAR */}
+      {/* ========================================
+          NAVBAR
+      ======================================== */}
 
       <nav className="navbar">
 
         <div className="brand">
-
           <div className="brandIcon">
             R
           </div>
@@ -138,7 +209,6 @@ export default function Home() {
           <span>
             ReplyAI
           </span>
-
         </div>
 
         <button
@@ -147,7 +217,7 @@ export default function Home() {
             document
               .getElementById("how")
               ?.scrollIntoView({
-                behavior: "smooth"
+                behavior: "smooth",
               })
           }
         >
@@ -156,8 +226,9 @@ export default function Home() {
 
       </nav>
 
-
-      {/* HERO */}
+      {/* ========================================
+          HERO
+      ======================================== */}
 
       <section className="hero">
 
@@ -175,8 +246,9 @@ export default function Home() {
           and get natural replies in seconds.
         </p>
 
-
-        {/* UPLOAD CARD */}
+        {/* ======================================
+            UPLOAD CARD
+        ====================================== */}
 
         <div className="card">
 
@@ -186,7 +258,7 @@ export default function Home() {
 
               <input
                 type="file"
-                accept="image/png,image/jpeg,image/webp"
+                accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
                 onChange={handleInput}
                 hidden
               />
@@ -204,7 +276,7 @@ export default function Home() {
               </p>
 
               <span className="fileHint">
-                PNG, JPG or WEBP · Max 10MB
+                PNG, JPG, WEBP or HEIC · Max 10MB
               </span>
 
             </label>
@@ -220,6 +292,7 @@ export default function Home() {
                 </span>
 
                 <button
+                  type="button"
                   onClick={removeImage}
                   className="removeButton"
                 >
@@ -240,8 +313,9 @@ export default function Home() {
 
         </div>
 
-
-        {/* ERROR */}
+        {/* ======================================
+            ERROR
+        ====================================== */}
 
         {error && (
           <div className="errorBox">
@@ -249,8 +323,9 @@ export default function Home() {
           </div>
         )}
 
-
-        {/* TONE */}
+        {/* ======================================
+            TONE
+        ====================================== */}
 
         <div className="toneSection">
 
@@ -263,10 +338,12 @@ export default function Home() {
             {tones.map((item) => (
 
               <button
+                type="button"
                 key={item.name}
                 onClick={() =>
-                  setTone(item.name)
+                  handleToneChange(item.name)
                 }
+                disabled={loading || !image}
                 className={`toneButton ${
                   tone === item.name
                     ? "active"
@@ -288,12 +365,14 @@ export default function Home() {
 
         </div>
 
-
-        {/* GENERATE BUTTON */}
+        {/* ======================================
+            GENERATE BUTTON
+        ====================================== */}
 
         <button
+          type="button"
           className="generateButton"
-          onClick={generateReplies}
+          onClick={() => generateReplies(tone)}
           disabled={loading || !image}
         >
 
@@ -314,8 +393,9 @@ export default function Home() {
 
         </button>
 
-
-        {/* RESULTS */}
+        {/* ======================================
+            RESULTS
+        ====================================== */}
 
         {replies.length > 0 && (
 
@@ -340,7 +420,6 @@ export default function Home() {
 
             </div>
 
-
             <div className="replyList">
 
               {replies.map(
@@ -348,7 +427,7 @@ export default function Home() {
 
                   <div
                     className="replyCard"
-                    key={index}
+                    key={`${tone}-${index}`}
                   >
 
                     <div className="replyNumber">
@@ -360,6 +439,7 @@ export default function Home() {
                     </p>
 
                     <button
+                      type="button"
                       className="copyButton"
                       onClick={() =>
                         copyReply(
@@ -388,8 +468,9 @@ export default function Home() {
 
       </section>
 
-
-      {/* HOW IT WORKS */}
+      {/* ========================================
+          HOW IT WORKS
+      ======================================== */}
 
       <section
         id="how"
@@ -419,7 +500,6 @@ export default function Home() {
 
           </div>
 
-
           <div className="step">
 
             <div>
@@ -432,11 +512,11 @@ export default function Home() {
 
             <p>
               AI reads the conversation
-              and understands the context.
+              and understands the context
+              and language.
             </p>
 
           </div>
-
 
           <div className="step">
 
@@ -459,8 +539,9 @@ export default function Home() {
 
       </section>
 
-
-      {/* FOOTER */}
+      {/* ========================================
+          FOOTER
+      ======================================== */}
 
       <footer>
 
@@ -477,9 +558,41 @@ export default function Home() {
         </div>
 
         <p>
-          Your screenshot is processed
-          securely.
+          Your screenshot is processed temporarily
+          to generate replies.
         </p>
+
+        <div className="footerLinks">
+
+          <a href="/about">
+            About
+          </a>
+
+          <a href="/how-it-works">
+            How It Works
+          </a>
+
+          <a href="/privacy">
+            Privacy Policy
+          </a>
+
+          <a href="/terms">
+            Terms & Conditions
+          </a>
+
+          <a href="/disclaimer">
+            Disclaimer
+          </a>
+
+          <a href="/contact">
+            Contact
+          </a>
+
+        </div>
+
+        <div className="copyright">
+          © 2026 ReplyAI. All rights reserved.
+        </div>
 
       </footer>
 
@@ -488,7 +601,9 @@ export default function Home() {
 }
 
 
-/* Convert uploaded image to base64 */
+/* ==========================================
+   CONVERT IMAGE TO BASE64
+   ========================================== */
 
 function fileToBase64(file) {
   return new Promise(
@@ -510,20 +625,19 @@ function fileToBase64(file) {
           return;
         }
 
-        /*
-          FileReader returns:
+        const parts = result.split(",");
 
-          data:image/jpeg;base64,AAAA...
+        if (parts.length < 2) {
+          reject(
+            new Error(
+              "Invalid image data."
+            )
+          );
 
-          Gemini expects only:
+          return;
+        }
 
-          AAAA...
-        */
-
-        const base64 =
-          result.split(",")[1];
-
-        resolve(base64);
+        resolve(parts[1]);
       };
 
       reader.onerror = () => {
