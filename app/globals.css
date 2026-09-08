@@ -1660,4 +1660,313 @@ footer > p {
   font-size: 14px !important;
   font-weight: 700 !important;
   white-space: nowrap !important;
+}/* =========================================================
+   FINAL REPLY CARD DESIGN
+   ========================================================= */
+
+.replyList {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+  margin-top: 20px;
+}
+
+.replyCard {
+  position: relative;
+
+  display: block;
+
+  width: 100%;
+
+  padding: 24px 22px 20px;
+
+  background: #ffffff;
+
+  border: 1px solid rgba(155, 28, 61, 0.10);
+
+  border-radius: 22px;
+
+  box-shadow:
+    0 10px 30px rgba(30, 10, 20, 0.07);
+
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.replyCard:hover {
+  transform: translateY(-2px);
+
+  box-shadow:
+    0 14px 35px rgba(30, 10, 20, 0.10);
+}
+
+
+/* REPLY NUMBER */
+
+.replyNumber {
+  width: 34px;
+  height: 34px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  margin-bottom: 16px;
+
+  border-radius: 50%;
+
+  background: #9b1c3d;
+
+  color: #ffffff;
+
+  font-size: 14px;
+  font-weight: 800;
+}
+
+
+/* MAIN REPLY TEXT */
+
+.replyCard p {
+  margin: 0;
+
+  color: #171217;
+
+  font-size: 20px !important;
+
+  line-height: 1.65;
+
+  font-weight: 600;
+
+  letter-spacing: -0.15px;
+
+  word-break: break-word;
+}
+
+
+/* ACTION AREA */
+
+.replyActions {
+  display: flex;
+
+  align-items: center;
+
+  gap: 10px;
+
+  width: 100%;
+
+  margin-top: 22px;
+
+  padding-top: 17px;
+
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+
+/* COPY BUTTON */
+
+.copyButton {
+  flex: 0 0 auto !important;
+
+  width: auto !important;
+
+  min-width: 88px !important;
+
+  min-height: 40px !important;
+
+  padding: 0 13px !important;
+
+  border: 1px solid rgba(155, 28, 61, 0.14) !important;
+
+  border-radius: 11px !important;
+
+  background: #f8eef2 !important;
+
+  color: #9b1c3d !important;
+
+  font-size: 12px !important;
+
+  font-weight: 800 !important;
+
+  white-space: nowrap !important;
+
+  display: inline-flex !important;
+
+  align-items: center;
+
+  justify-content: center;
+
+  cursor: pointer;
+
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease;
+}
+
+.copyButton:hover {
+  background: #f3e3e8 !important;
+
+  transform: translateY(-1px);
+}
+
+.copyButton:active {
+  transform: scale(0.97);
+}
+
+
+/* SHARE BUTTON */
+
+.shareReplyButton {
+  flex: 1 !important;
+
+  width: auto !important;
+
+  min-width: 0 !important;
+
+  min-height: 40px !important;
+
+  padding: 0 14px !important;
+
+  border: none !important;
+
+  border-radius: 11px !important;
+
+  background: #9b1c3d !important;
+
+  color: #ffffff !important;
+
+  font-size: 12px !important;
+
+  font-weight: 800 !important;
+
+  white-space: nowrap !important;
+
+  display: inline-flex !important;
+
+  align-items: center;
+
+  justify-content: center;
+
+  cursor: pointer;
+
+  box-shadow:
+    0 6px 16px rgba(155, 28, 61, 0.18);
+
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.shareReplyButton:hover {
+  transform: translateY(-1px);
+
+  opacity: 0.94;
+}
+
+.shareReplyButton:active {
+  transform: scale(0.98);
+}
+
+.shareReplyButton:disabled {
+  opacity: 0.6;
+
+  cursor: not-allowed;
+}
+
+
+/* =========================================================
+   MOBILE REPLY CARD
+   ========================================================= */
+
+@media (max-width: 600px) {
+
+  .replyList {
+    gap: 14px;
+
+    margin-top: 18px;
+  }
+
+  .replyCard {
+    padding: 21px 18px 18px;
+
+    border-radius: 19px;
+  }
+
+  .replyNumber {
+    width: 32px;
+    height: 32px;
+
+    margin-bottom: 14px;
+
+    font-size: 13px;
+  }
+
+  .replyCard p {
+    font-size: 18px !important;
+
+    line-height: 1.65;
+
+    font-weight: 600;
+  }
+
+  .replyActions {
+    flex-direction: row;
+
+    gap: 8px;
+
+    margin-top: 19px;
+
+    padding-top: 15px;
+  }
+
+  .replyActions button {
+    width: auto !important;
+  }
+
+  .copyButton {
+    flex: 0 0 auto !important;
+
+    min-width: 82px !important;
+
+    min-height: 40px !important;
+
+    padding: 0 11px !important;
+
+    font-size: 11px !important;
+  }
+
+  .shareReplyButton {
+    flex: 1 !important;
+
+    min-height: 40px !important;
+
+    padding: 0 10px !important;
+
+    font-size: 11px !important;
+  }
+}
+
+
+/* VERY SMALL PHONES */
+
+@media (max-width: 380px) {
+
+  .replyCard {
+    padding: 19px 15px 16px;
+  }
+
+  .replyCard p {
+    font-size: 17px !important;
+  }
+
+  .copyButton {
+    min-width: 76px !important;
+
+    padding: 0 9px !important;
+  }
+
+  .shareReplyButton {
+    padding: 0 8px !important;
+  }
 }
