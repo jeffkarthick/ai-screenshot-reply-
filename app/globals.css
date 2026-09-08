@@ -1113,3 +1113,263 @@ footer > p {
     gap: 7px 14px;
   }
 }
+/* =========================================
+   INFORMATION / LEGAL PAGES
+========================================= */
+
+.infoPage {
+  min-height: 100vh;
+  background: #fafafa;
+  padding: 40px 20px 70px;
+}
+
+.infoContainer {
+  width: 100%;
+  max-width: 850px;
+  margin: 0 auto;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 32px;
+  color: #8f1538;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.backLink:hover {
+  text-decoration: underline;
+}
+
+.infoBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #171717;
+  font-size: 21px;
+  font-weight: 800;
+  margin-bottom: 34px;
+}
+
+.infoBrand .brandIcon {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #8f1538;
+  color: white;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.infoContainer h1 {
+  margin: 0;
+  color: #171717;
+  font-size: clamp(34px, 6vw, 52px);
+  line-height: 1.08;
+  letter-spacing: -1.5px;
+}
+
+.updated {
+  margin-top: 12px;
+  color: #777;
+  font-size: 14px;
+}
+
+.lead {
+  margin-top: 22px;
+  max-width: 720px;
+  color: #555;
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.infoSection {
+  margin-top: 42px;
+}
+
+.infoSection h2 {
+  margin: 0 0 12px;
+  color: #202020;
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+.infoSection p {
+  margin: 0 0 13px;
+  color: #555;
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.infoSteps {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 40px;
+}
+
+.infoStep {
+  display: flex;
+  gap: 18px;
+  padding: 24px;
+  background: white;
+  border: 1px solid #ececec;
+  border-radius: 18px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.04);
+}
+
+.infoStepNumber {
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #8f1538;
+  color: white;
+  font-weight: 800;
+}
+
+.infoStep h2 {
+  margin: 0 0 8px;
+  font-size: 19px;
+}
+
+.infoStep p {
+  margin: 0;
+  color: #666;
+  line-height: 1.65;
+}
+
+.contactCard {
+  margin-top: 40px;
+  padding: 42px 30px;
+  text-align: center;
+  background: white;
+  border: 1px solid #ececec;
+  border-radius: 22px;
+  box-shadow: 0 10px 35px rgba(0, 0, 0, 0.05);
+}
+
+.contactIcon {
+  font-size: 42px;
+  margin-bottom: 12px;
+}
+
+.contactCard h2 {
+  margin: 0 0 12px;
+  font-size: 26px;
+}
+
+.contactCard p {
+  max-width: 560px;
+  margin: 0 auto 24px;
+  color: #666;
+  line-height: 1.7;
+}
+
+.contactButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 24px;
+  border-radius: 12px;
+  background: #8f1538;
+  color: white;
+  text-decoration: none;
+  font-weight: 700;
+  transition: 0.2s ease;
+}
+
+.contactButton:hover {
+  transform: translateY(-1px);
+  opacity: 0.94;
+}
+
+.contactNote {
+  margin-top: 18px;
+  color: #888;
+  font-size: 13px;
+  text-align: center;
+}
+
+.infoFooter {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e5e5;
+  color: #888;
+  font-size: 13px;
+  text-align: center;
+}
+
+
+/* =========================================
+   MOBILE
+========================================= */
+
+@media (max-width: 650px) {
+
+  .infoPage {
+    padding: 28px 16px 55px;
+  }
+
+  .backLink {
+    margin-bottom: 25px;
+  }
+
+  .infoBrand {
+    margin-bottom: 27px;
+  }
+
+  .infoContainer h1 {
+    font-size: 36px;
+  }
+
+  .lead {
+    font-size: 16px;
+    line-height: 1.65;
+  }
+
+  .infoSection {
+    margin-top: 34px;
+  }
+
+  .infoSection h2 {
+    font-size: 20px;
+  }
+
+  .infoSection p {
+    font-size: 15px;
+    line-height: 1.7;
+  }
+
+  .infoStep {
+    padding: 20px;
+    gap: 14px;
+  }
+
+  .infoStepNumber {
+    flex-basis: 38px;
+    width: 38px;
+    height: 38px;
+  }
+
+  .infoStep h2 {
+    font-size: 18px;
+  }
+
+  .contactCard {
+    padding: 34px 20px;
+  }
+
+  .infoFooter {
+    margin-top: 45px;
+  }
+}
