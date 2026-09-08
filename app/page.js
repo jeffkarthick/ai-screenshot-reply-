@@ -1372,22 +1372,33 @@ async function createReferralCode(
 ========================================== */
 
 async function loadPromoImage() {
-  if (
-    typeof window ===
-    "undefined"
-  ) {
+  if (typeof window === "undefined") {
     return null;
   }
 
-  // Cache-busting version
-  const response =
-    await fetch(
-      `/replyai-promo.png?v=3`,
-      {
-        cache: "no-store",
-      }
-    );
+  const response = await fetch(
+    `/replyai-share.png?v=20260908`,
+    {
+      cache: "no-store",
+    }
+  );
 
+  if (!response.ok) {
+    throw new Error(
+      "Unable to load ReplyAI promo image."
+    );
+  }
+
+  const blob = await response.blob();
+
+  return new File(
+    [blob],
+    "replyai-share.png",
+    {
+      type: blob.type || "image/png",
+    }
+  );
+}
   if (!response.ok) {
     throw new Error(
       "Unable to load ReplyAI promo image."
