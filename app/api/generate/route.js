@@ -21,6 +21,25 @@ function getUserKey(userId) {
   return `replyai:user:${userId}`;
 }
 
+function getRepliesKey(userId) {
+  return `replyai:replies:${userId}`;
+}
+
+function getTotalGeneratedKey(userId) {
+  return `replyai:generated:${userId}`;
+}
+
+function getScreenshotUsageKey(userId, fingerprint) {
+  return `replyai:used:${userId}:${fingerprint}`;
+}
+
+function createScreenshotFingerprint(image) {
+  return crypto
+    .createHash("sha256")
+    .update(image)
+    .digest("hex");
+}
+
 function cleanBase64Image(image) {
   if (!image || typeof image !== "string") {
     return "";
@@ -124,9 +143,74 @@ Format:
 `;
 }
 
+/*
+ * ==========================================
+ * ATOMIC REPLY USAGE
+ *
+ * Result:
+ *
+ * > 0  = this screenshot consumed one reply
+ *   0  = no replies remaining
+ *  -1  = this screenshot was already used
+ *
+ * This prevents:
+ * Casual -> Romantic -> Funny
+ * from consuming multiple replies.
+ * ==========================================
+ */
+
+async function consumeReplyOnce(
+  repliesKey,
+  screenshotUsageKey
+) {
+  const script = `
+    local alreadyUsed = redis.call(
+      "EXISTS",
+      KEYS[2]
+    )
+
+    if alreadyUsed == 1 then
+      return -1
+    end
+
+    local remaining = tonumber(
+      redis.call(
+        "GET",
+        KEYS[1]
+      ) or "0"
+    )
+
+    if remaining <= 0 then
+      return 0
+    end
+
+    local newRemaining =
+      redis.call(
+        "DECR",
+        KEYS[1]
+      )
+
+    redis.call(
+      "SET",
+      KEYS[2],
+      "1"
+    )
+
+    return newRemaining
+  `;
+
+  return await redis.eval(
+    script,
+    [
+      repliesKey,
+      screenshotUsageKey,
+    ],
+    []
+  );
+}
+
 export async function POST(req) {
   let userId = null;
-  let isNewUser = false;
 
   try {
     const body = await req.json();
@@ -140,7 +224,8 @@ export async function POST(req) {
     if (!image) {
       return NextResponse.json(
         {
-          error: "Screenshot is required.",
+          error:
+            "Screenshot is required.",
         },
         {
           status: 400,
@@ -167,17 +252,24 @@ export async function POST(req) {
      */
 
     const existingUserId =
-      req.cookies.get("replyai_user_id")
-        ?.value;
+      req.cookies.get(
+        "replyai_user_id"
+      )?.value;
 
     if (existingUserId) {
       userId = existingUserId;
     } else {
       userId = createUserId();
-      isNewUser = true;
     }
 
-    const userKey = getUserKey(userId);
+    const userKey =
+      getUserKey(userId);
+
+    const repliesKey =
+      getRepliesKey(userId);
+
+    const totalGeneratedKey =
+      getTotalGeneratedKey(userId);
 
     /*
      * =========================================
@@ -185,25 +277,88 @@ export async function POST(req) {
      * =========================================
      */
 
-    let user = await redis.get(userKey);
+    let user =
+      await redis.get(userKey);
 
     if (!user) {
       user = {
-        repliesRemaining: STARTING_REPLIES,
+        id: userId,
+        repliesRemaining:
+          STARTING_REPLIES,
         totalGenerated: 0,
-        createdAt: new Date().toISOString(),
+        createdAt:
+          new Date().toISOString(),
       };
 
-      await redis.set(userKey, user);
-      isNewUser = true;
-    }
+      await redis.set(
+        userKey,
+        user
+      );
 
-    const repliesRemaining =
-      Number(user.repliesRemaining ?? 0);
+      await redis.set(
+        repliesKey,
+        STARTING_REPLIES,
+        {
+          nx: true,
+        }
+      );
+    } else {
+      /*
+       * Migrate users created by the
+       * previous version.
+       */
+
+      const existingReplies =
+        await redis.get(
+          repliesKey
+        );
+
+      if (
+        existingReplies === null
+      ) {
+        await redis.set(
+          repliesKey,
+          Number(
+            user.repliesRemaining ??
+              STARTING_REPLIES
+          ),
+          {
+            nx: true,
+          }
+        );
+      }
+    }
 
     /*
      * =========================================
-     * CHECK USAGE
+     * CURRENT REPLY COUNT
+     * =========================================
+     */
+
+    let repliesRemaining =
+      Number(
+        await redis.get(
+          repliesKey
+        )
+      );
+
+    if (
+      Number.isNaN(
+        repliesRemaining
+      )
+    ) {
+      repliesRemaining =
+        STARTING_REPLIES;
+
+      await redis.set(
+        repliesKey,
+        STARTING_REPLIES
+      );
+    }
+
+    /*
+     * =========================================
+     * EARLY USAGE CHECK
      * =========================================
      */
 
@@ -213,7 +368,8 @@ export async function POST(req) {
           {
             error:
               "You've used all your free replies.",
-            code: "NO_REPLIES_LEFT",
+            code:
+              "NO_REPLIES_LEFT",
             repliesRemaining: 0,
           },
           {
@@ -254,7 +410,8 @@ export async function POST(req) {
     ];
 
     const finalMimeType =
-      mimeType || "image/jpeg";
+      mimeType ||
+      "image/jpeg";
 
     if (
       !allowedMimeTypes.includes(
@@ -286,6 +443,33 @@ export async function POST(req) {
         }
       );
     }
+
+    /*
+     * =========================================
+     * SCREENSHOT FINGERPRINT
+     *
+     * Same screenshot = same fingerprint
+     *
+     * Therefore:
+     *
+     * Casual      -> consumes 1
+     * Romantic    -> consumes 0
+     * Funny       -> consumes 0
+     *
+     * New screenshot -> consumes 1
+     * =========================================
+     */
+
+    const fingerprint =
+      createScreenshotFingerprint(
+        cleanImage
+      );
+
+    const screenshotUsageKey =
+      getScreenshotUsageKey(
+        userId,
+        fingerprint
+      );
 
     /*
      * =========================================
@@ -321,6 +505,7 @@ export async function POST(req) {
                 headers: {
                   "Content-Type":
                     "application/json",
+
                   "x-goog-api-key":
                     process.env
                       .GEMINI_API_KEY,
@@ -361,7 +546,8 @@ export async function POST(req) {
             const errorText =
               await response.text();
 
-            lastError = errorText;
+            lastError =
+              errorText;
 
             console.error(
               `Gemini ${model} error:`,
@@ -373,7 +559,8 @@ export async function POST(req) {
                 response.status,
                 errorText
               ) &&
-              attempt < maxAttempts
+              attempt <
+                maxAttempts
             ) {
               await new Promise(
                 (resolve) =>
@@ -404,7 +591,8 @@ export async function POST(req) {
           );
 
           if (
-            attempt < maxAttempts
+            attempt <
+            maxAttempts
           ) {
             await new Promise(
               (resolve) =>
@@ -473,7 +661,8 @@ export async function POST(req) {
 
     const text =
       finalData?.candidates?.[0]
-        ?.content?.parts?.[0]?.text;
+        ?.content?.parts?.[0]
+        ?.text;
 
     if (!text) {
       return NextResponse.json(
@@ -490,7 +679,8 @@ export async function POST(req) {
     let parsed;
 
     try {
-      parsed = JSON.parse(text);
+      parsed =
+        JSON.parse(text);
     } catch (error) {
       console.error(
         "Invalid Gemini JSON:",
@@ -509,7 +699,9 @@ export async function POST(req) {
     }
 
     const replies =
-      Array.isArray(parsed?.replies)
+      Array.isArray(
+        parsed?.replies
+      )
         ? parsed.replies
             .filter(
               (reply) =>
@@ -519,7 +711,9 @@ export async function POST(req) {
             .slice(0, 3)
         : [];
 
-    if (replies.length === 0) {
+    if (
+      replies.length === 0
+    ) {
       return NextResponse.json(
         {
           error:
@@ -535,31 +729,108 @@ export async function POST(req) {
      * =========================================
      * SUCCESS
      *
-     * ONLY NOW consume 1 reply.
-     * Failed requests do NOT consume usage.
+     * Atomically consume one reply ONLY
+     * if this screenshot has never consumed
+     * one before.
      * =========================================
      */
 
-    const newRepliesRemaining =
-      Math.max(
-        0,
-        repliesRemaining - 1
+    const usageResult =
+      await consumeReplyOnce(
+        repliesKey,
+        screenshotUsageKey
       );
 
-    await redis.set(
-      userKey,
-      {
-        ...user,
-        repliesRemaining:
-          newRepliesRemaining,
-        totalGenerated:
-          Number(
-            user.totalGenerated ?? 0
-          ) + 1,
-        lastGeneratedAt:
-          new Date().toISOString(),
-      }
-    );
+    /*
+     * Same screenshot was already charged.
+     *
+     * Tone change:
+     * No additional usage.
+     */
+
+    if (
+      Number(usageResult) === -1
+    ) {
+      repliesRemaining =
+        Number(
+          await redis.get(
+            repliesKey
+          )
+        );
+
+    } else if (
+      Number(usageResult) === 0
+    ) {
+      /*
+       * No replies available.
+       */
+
+      const response =
+        NextResponse.json(
+          {
+            error:
+              "You've used all your free replies.",
+            code:
+              "NO_REPLIES_LEFT",
+            repliesRemaining: 0,
+          },
+          {
+            status: 402,
+          }
+        );
+
+      response.cookies.set(
+        "replyai_user_id",
+        userId,
+        {
+          httpOnly: true,
+          secure:
+            process.env.NODE_ENV ===
+            "production",
+          sameSite: "lax",
+          maxAge:
+            60 * 60 * 24 * 365,
+          path: "/",
+        }
+      );
+
+      return response;
+
+    } else {
+      /*
+       * First successful generation for
+       * this screenshot.
+       */
+
+      repliesRemaining =
+        Number(
+          usageResult
+        );
+
+      await redis.incr(
+        totalGeneratedKey
+      );
+
+      /*
+       * Keep user record compatible
+       * with the existing database structure.
+       */
+
+      await redis.set(
+        userKey,
+        {
+          ...user,
+          repliesRemaining,
+          totalGenerated:
+            Number(
+              user.totalGenerated ??
+                0
+            ) + 1,
+          lastGeneratedAt:
+            new Date().toISOString(),
+        }
+      );
+    }
 
     /*
      * =========================================
@@ -570,8 +841,7 @@ export async function POST(req) {
     const response =
       NextResponse.json({
         replies,
-        repliesRemaining:
-          newRepliesRemaining,
+        repliesRemaining,
       });
 
     response.cookies.set(
@@ -590,6 +860,7 @@ export async function POST(req) {
     );
 
     return response;
+
   } catch (error) {
     console.error(
       "ReplyAI generate error:",
