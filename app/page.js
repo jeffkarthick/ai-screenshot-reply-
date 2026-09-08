@@ -212,10 +212,9 @@ export default function Home() {
         );
 
         throw new Error(
-          data?.details ||
-          data?.error ||
-          "Unable to generate replies."
-        );
+  data?.error ||
+  "Unable to generate replies. Please try again."
+);
       }
 
       // ========================================
