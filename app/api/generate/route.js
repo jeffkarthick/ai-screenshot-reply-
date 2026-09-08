@@ -13,6 +13,67 @@ const MODELS = [
 
 const STARTING_REPLIES = 5;
 
+/*
+ * Keep this reasonably short.
+ * The screenshot itself contains the conversation,
+ * so we don't need a huge instruction prompt.
+ */
+function buildPrompt(tone) {
+  return `
+You are ReplyAI, an expert messaging reply assistant.
+
+Analyze the conversation screenshot and generate exactly 3 natural reply suggestions.
+
+Selected tone:
+${tone || "Casual"}
+
+LANGUAGE:
+Use the SAME language, script and writing style shown in the screenshot.
+
+Examples:
+- Tamil script -> Tamil script
+- Tanglish -> Tanglish
+- English -> English
+- Malayalam -> Malayalam
+- Manglish -> Manglish
+- Hindi -> Hindi
+- Hinglish -> Hinglish
+- Mixed language -> preserve the natural mix
+
+Do NOT translate the conversation.
+
+Preserve:
+- slang
+- abbreviations
+- casual spelling
+- emojis
+- punctuation
+- short forms
+- texting style
+
+The website language must not affect reply language.
+
+Tone affects personality only, NOT language.
+
+RULES:
+- Sound natural and human.
+- Keep replies reasonably short.
+- Match the selected tone.
+- Do not mention AI.
+- Do not invent information not visible in the screenshot.
+- Return ONLY valid JSON.
+
+FORMAT:
+{
+  "replies": [
+    "reply 1",
+    "reply 2",
+    "reply 3"
+  ]
+}
+`;
+}
+
 function createUserId() {
   return crypto.randomUUID();
 }
@@ -68,95 +129,16 @@ function isTemporaryError(status, errorText = "") {
   );
 }
 
-function buildPrompt(tone) {
-  return `
-You are ReplyAI, an expert messaging reply assistant.
-
-Analyze the conversation screenshot carefully.
-
-Understand:
-- What the other person said
-- The conversation context
-- The emotional tone
-- The relationship/context visible in the screenshot
-- The language and writing style used in the conversation
-
-Generate exactly 3 natural reply suggestions.
-
-Selected tone:
-${tone || "Casual"}
-
-IMPORTANT LANGUAGE RULES:
-
-The replies MUST use the same language, script and writing style as the conversation in the screenshot.
-
-Examples:
-
-- Tamil script conversation → reply in Tamil script
-- Tanglish conversation → reply in Tanglish
-- English conversation → reply in English
-- Malayalam script → reply in Malayalam
-- Manglish → reply in Manglish
-- Hindi → reply in Hindi
-- Hinglish → reply in Hinglish
-- Mixed-language conversation → preserve the same natural mix
-
-Do NOT automatically translate the conversation into English.
-
-Do NOT convert Tanglish into Tamil script.
-
-Do NOT convert Malayalam into English.
-
-Preserve:
-- slang
-- abbreviations
-- casual spelling
-- emojis
-- punctuation style
-- texting style
-- short forms
-- natural conversational expressions
-
-The website interface language must NOT affect the reply language.
-
-The selected tone must NOT change the language.
-
-Tone should affect only the personality/style of the response.
-
-Rules:
-- Replies must sound natural and human.
-- Do not mention that you are an AI.
-- Do not invent information that is not visible in the screenshot.
-- Keep replies reasonably short.
-- Match the selected tone.
-- Preserve the conversation's language and style.
-- Return ONLY valid JSON.
-
-Format:
-{
-  "replies": [
-    "reply 1",
-    "reply 2",
-    "reply 3"
-  ]
-}
-`;
-}
-
 /*
- * ==========================================
+ * ============================================================
  * ATOMIC REPLY USAGE
  *
  * Result:
  *
- * > 0  = this screenshot consumed one reply
+ * > 0  = screenshot consumed one reply
  *   0  = no replies remaining
- *  -1  = this screenshot was already used
- *
- * This prevents:
- * Casual -> Romantic -> Funny
- * from consuming multiple replies.
- * ==========================================
+ *  -1  = screenshot already used
+ * ============================================================
  */
 
 async function consumeReplyOnce(
@@ -209,17 +191,170 @@ async function consumeReplyOnce(
   );
 }
 
+/*
+ * ============================================================
+ * GEMINI REQUEST
+ *
+ * Optimizations:
+ *
+ * 1. No unnecessary 900ms retry delay
+ * 2. One attempt per model
+ * 3. Low thinking for Gemini 3.x
+ * 4. Small output limit
+ * 5. Request timeout
+ * ============================================================
+ */
+
+async function generateWithGemini(
+  model,
+  image,
+  mimeType,
+  tone
+) {
+  const controller =
+    new AbortController();
+
+  const timeout = setTimeout(
+    () => controller.abort(),
+    20000
+  );
+
+  try {
+    const generationConfig = {
+      responseMimeType:
+        "application/json",
+
+      /*
+       * Reply suggestions are short.
+       * 300 tokens is more than enough.
+       */
+      maxOutputTokens: 300,
+
+      /*
+       * Keep your existing creative behavior.
+       */
+      temperature: 0.8,
+    };
+
+    /*
+     * Gemini 3.x:
+     * Lower thinking = lower latency.
+     *
+     * Gemini 2.5 does NOT support thinkingLevel,
+     * so only add it for Gemini 3.x.
+     */
+    if (
+      model.startsWith("gemini-3.")
+    ) {
+      generationConfig.thinkingConfig = {
+        thinkingLevel: "low",
+      };
+    }
+
+    const response =
+      await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            "x-goog-api-key":
+              process.env
+                .GEMINI_API_KEY,
+          },
+
+          signal:
+            controller.signal,
+
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType,
+                      data: image,
+                    },
+                  },
+
+                  {
+                    text:
+                      buildPrompt(
+                        tone
+                      ),
+                  },
+                ],
+              },
+            ],
+
+            generationConfig,
+          }),
+        }
+      );
+
+    if (!response.ok) {
+      const errorText =
+        await response.text();
+
+      return {
+        success: false,
+        temporary:
+          isTemporaryError(
+            response.status,
+            errorText
+          ),
+        error:
+          errorText ||
+          `Gemini returned ${response.status}`,
+      };
+    }
+
+    const data =
+      await response.json();
+
+    return {
+      success: true,
+      data,
+    };
+  } catch (error) {
+    const message =
+      error?.name ===
+      "AbortError"
+        ? "Gemini request timed out."
+        : error?.message ||
+          "Gemini request failed.";
+
+    return {
+      success: false,
+      temporary: true,
+      error: message,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function POST(req) {
   let userId = null;
 
   try {
-    const body = await req.json();
+    const body =
+      await req.json();
 
     const {
       image,
       mimeType,
       tone,
     } = body;
+
+    /*
+     * ========================================================
+     * BASIC VALIDATION
+     * ========================================================
+     */
 
     if (!image) {
       return NextResponse.json(
@@ -233,7 +368,9 @@ export async function POST(req) {
       );
     }
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (
+      !process.env.GEMINI_API_KEY
+    ) {
       return NextResponse.json(
         {
           error:
@@ -246,9 +383,9 @@ export async function POST(req) {
     }
 
     /*
-     * =========================================
+     * ========================================================
      * USER ID
-     * =========================================
+     * ========================================================
      */
 
     const existingUserId =
@@ -256,11 +393,9 @@ export async function POST(req) {
         "replyai_user_id"
       )?.value;
 
-    if (existingUserId) {
-      userId = existingUserId;
-    } else {
-      userId = createUserId();
-    }
+    userId =
+      existingUserId ||
+      createUserId();
 
     const userKey =
       getUserKey(userId);
@@ -272,40 +407,50 @@ export async function POST(req) {
       getTotalGeneratedKey(userId);
 
     /*
-     * =========================================
+     * ========================================================
      * USER RECORD
-     * =========================================
+     * ========================================================
      */
 
     let user =
-      await redis.get(userKey);
+      await redis.get(
+        userKey
+      );
 
     if (!user) {
       user = {
         id: userId,
+
         repliesRemaining:
           STARTING_REPLIES,
+
         totalGenerated: 0,
+
         createdAt:
           new Date().toISOString(),
       };
 
-      await redis.set(
-        userKey,
-        user
-      );
+      /*
+       * These two Redis operations can run
+       * at the same time.
+       */
+      await Promise.all([
+        redis.set(
+          userKey,
+          user
+        ),
 
-      await redis.set(
-        repliesKey,
-        STARTING_REPLIES,
-        {
-          nx: true,
-        }
-      );
+        redis.set(
+          repliesKey,
+          STARTING_REPLIES,
+          {
+            nx: true,
+          }
+        ),
+      ]);
     } else {
       /*
-       * Migrate users created by the
-       * previous version.
+       * Migrate old users.
        */
 
       const existingReplies =
@@ -330,9 +475,9 @@ export async function POST(req) {
     }
 
     /*
-     * =========================================
+     * ========================================================
      * CURRENT REPLY COUNT
-     * =========================================
+     * ========================================================
      */
 
     let repliesRemaining =
@@ -357,19 +502,23 @@ export async function POST(req) {
     }
 
     /*
-     * =========================================
+     * ========================================================
      * EARLY USAGE CHECK
-     * =========================================
+     * ========================================================
      */
 
-    if (repliesRemaining <= 0) {
+    if (
+      repliesRemaining <= 0
+    ) {
       const response =
         NextResponse.json(
           {
             error:
               "You've used all your free replies.",
+
             code:
               "NO_REPLIES_LEFT",
+
             repliesRemaining: 0,
           },
           {
@@ -382,12 +531,16 @@ export async function POST(req) {
         userId,
         {
           httpOnly: true,
+
           secure:
             process.env.NODE_ENV ===
             "production",
+
           sameSite: "lax",
+
           maxAge:
             60 * 60 * 24 * 365,
+
           path: "/",
         }
       );
@@ -396,9 +549,9 @@ export async function POST(req) {
     }
 
     /*
-     * =========================================
+     * ========================================================
      * IMAGE VALIDATION
-     * =========================================
+     * ========================================================
      */
 
     const allowedMimeTypes = [
@@ -445,19 +598,9 @@ export async function POST(req) {
     }
 
     /*
-     * =========================================
+     * ========================================================
      * SCREENSHOT FINGERPRINT
-     *
-     * Same screenshot = same fingerprint
-     *
-     * Therefore:
-     *
-     * Casual      -> consumes 1
-     * Romantic    -> consumes 0
-     * Funny       -> consumes 0
-     *
-     * New screenshot -> consumes 1
-     * =========================================
+     * ========================================================
      */
 
     const fingerprint =
@@ -472,9 +615,15 @@ export async function POST(req) {
       );
 
     /*
-     * =========================================
-     * GEMINI REQUEST
-     * =========================================
+     * ========================================================
+     * GEMINI
+     *
+     * IMPORTANT:
+     * Model versions are unchanged.
+     *
+     * We simply try each model once.
+     * No unnecessary 900ms wait.
+     * ========================================================
      */
 
     let finalData = null;
@@ -483,139 +632,48 @@ export async function POST(req) {
     for (
       const model of MODELS
     ) {
-      let attempt = 0;
-      const maxAttempts = 2;
+      console.log(
+        `ReplyAI: trying ${model}`
+      );
 
-      while (
-        attempt < maxAttempts
+      const result =
+        await generateWithGemini(
+          model,
+          cleanImage,
+          finalMimeType,
+          tone
+        );
+
+      if (
+        result.success
       ) {
-        attempt++;
+        finalData =
+          result.data;
 
-        try {
-          console.log(
-            `ReplyAI: trying ${model}, attempt ${attempt}`
-          );
-
-          const response =
-            await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-              {
-                method: "POST",
-
-                headers: {
-                  "Content-Type":
-                    "application/json",
-
-                  "x-goog-api-key":
-                    process.env
-                      .GEMINI_API_KEY,
-                },
-
-                body: JSON.stringify({
-                  contents: [
-                    {
-                      parts: [
-                        {
-                          inlineData: {
-                            mimeType:
-                              finalMimeType,
-                            data:
-                              cleanImage,
-                          },
-                        },
-                        {
-                          text:
-                            buildPrompt(
-                              tone
-                            ),
-                        },
-                      ],
-                    },
-                  ],
-
-                  generationConfig: {
-                    responseMimeType:
-                      "application/json",
-                    temperature: 0.8,
-                  },
-                }),
-              }
-            );
-
-          if (!response.ok) {
-            const errorText =
-              await response.text();
-
-            lastError =
-              errorText;
-
-            console.error(
-              `Gemini ${model} error:`,
-              errorText
-            );
-
-            if (
-              isTemporaryError(
-                response.status,
-                errorText
-              ) &&
-              attempt <
-                maxAttempts
-            ) {
-              await new Promise(
-                (resolve) =>
-                  setTimeout(
-                    resolve,
-                    900
-                  )
-              );
-
-              continue;
-            }
-
-            break;
-          }
-
-          finalData =
-            await response.json();
-
-          break;
-        } catch (error) {
-          lastError =
-            error?.message ||
-            "Gemini request failed.";
-
-          console.error(
-            `Gemini ${model} request failed:`,
-            error
-          );
-
-          if (
-            attempt <
-            maxAttempts
-          ) {
-            await new Promise(
-              (resolve) =>
-                setTimeout(
-                  resolve,
-                  900
-                )
-            );
-
-            continue;
-          }
-        }
-      }
-
-      if (finalData) {
         break;
       }
+
+      lastError =
+        result.error ||
+        "Gemini request failed.";
+
+      console.error(
+        `Gemini ${model} error:`,
+        lastError
+      );
+
+      /*
+       * Immediately try the next model.
+       *
+       * No artificial 900ms delay.
+       */
+      continue;
     }
 
     /*
-     * =========================================
+     * ========================================================
      * ALL MODELS FAILED
-     * =========================================
+     * ========================================================
      */
 
     if (!finalData) {
@@ -640,12 +698,16 @@ export async function POST(req) {
         userId,
         {
           httpOnly: true,
+
           secure:
             process.env.NODE_ENV ===
             "production",
+
           sameSite: "lax",
+
           maxAge:
             60 * 60 * 24 * 365,
+
           path: "/",
         }
       );
@@ -654,13 +716,14 @@ export async function POST(req) {
     }
 
     /*
-     * =========================================
+     * ========================================================
      * READ AI RESPONSE
-     * =========================================
+     * ========================================================
      */
 
     const text =
-      finalData?.candidates?.[0]
+      finalData
+        ?.candidates?.[0]
         ?.content?.parts?.[0]
         ?.text;
 
@@ -675,6 +738,12 @@ export async function POST(req) {
         }
       );
     }
+
+    /*
+     * ========================================================
+     * PARSE JSON
+     * ========================================================
+     */
 
     let parsed;
 
@@ -698,6 +767,12 @@ export async function POST(req) {
       );
     }
 
+    /*
+     * ========================================================
+     * CLEAN REPLIES
+     * ========================================================
+     */
+
     const replies =
       Array.isArray(
         parsed?.replies
@@ -706,7 +781,13 @@ export async function POST(req) {
             .filter(
               (reply) =>
                 typeof reply ===
-                "string"
+                  "string" &&
+                reply.trim()
+                  .length > 0
+            )
+            .map(
+              (reply) =>
+                reply.trim()
             )
             .slice(0, 3)
         : [];
@@ -726,13 +807,9 @@ export async function POST(req) {
     }
 
     /*
-     * =========================================
-     * SUCCESS
-     *
-     * Atomically consume one reply ONLY
-     * if this screenshot has never consumed
-     * one before.
-     * =========================================
+     * ========================================================
+     * ATOMIC USAGE
+     * ========================================================
      */
 
     const usageResult =
@@ -742,14 +819,14 @@ export async function POST(req) {
       );
 
     /*
-     * Same screenshot was already charged.
-     *
-     * Tone change:
-     * No additional usage.
+     * Same screenshot:
+     * do NOT charge again.
      */
 
     if (
-      Number(usageResult) === -1
+      Number(
+        usageResult
+      ) === -1
     ) {
       repliesRemaining =
         Number(
@@ -757,21 +834,26 @@ export async function POST(req) {
             repliesKey
           )
         );
+    }
 
-    } else if (
-      Number(usageResult) === 0
+    /*
+     * No replies available.
+     */
+
+    else if (
+      Number(
+        usageResult
+      ) === 0
     ) {
-      /*
-       * No replies available.
-       */
-
       const response =
         NextResponse.json(
           {
             error:
               "You've used all your free replies.",
+
             code:
               "NO_REPLIES_LEFT",
+
             repliesRemaining: 0,
           },
           {
@@ -784,63 +866,73 @@ export async function POST(req) {
         userId,
         {
           httpOnly: true,
+
           secure:
             process.env.NODE_ENV ===
             "production",
+
           sameSite: "lax",
+
           maxAge:
             60 * 60 * 24 * 365,
+
           path: "/",
         }
       );
 
       return response;
+    }
 
-    } else {
-      /*
-       * First successful generation for
-       * this screenshot.
-       */
+    /*
+     * First successful generation
+     * for this screenshot.
+     */
 
+    else {
       repliesRemaining =
         Number(
           usageResult
         );
 
-      await redis.incr(
-        totalGeneratedKey
-      );
-
       /*
-       * Keep user record compatible
-       * with the existing database structure.
+       * These two Redis operations
+       * are independent, so run together.
        */
+      await Promise.all([
+        redis.incr(
+          totalGeneratedKey
+        ),
 
-      await redis.set(
-        userKey,
-        {
-          ...user,
-          repliesRemaining,
-          totalGenerated:
-            Number(
-              user.totalGenerated ??
-                0
-            ) + 1,
-          lastGeneratedAt:
-            new Date().toISOString(),
-        }
-      );
+        redis.set(
+          userKey,
+          {
+            ...user,
+
+            repliesRemaining,
+
+            totalGenerated:
+              Number(
+                user.totalGenerated ??
+                  0
+              ) + 1,
+
+            lastGeneratedAt:
+              new Date().toISOString(),
+          }
+        ),
+      ]);
     }
 
     /*
-     * =========================================
+     * ========================================================
      * RESPONSE
-     * =========================================
+     * ========================================================
      */
 
     const response =
       NextResponse.json({
         replies,
+
         repliesRemaining,
       });
 
@@ -849,12 +941,16 @@ export async function POST(req) {
       userId,
       {
         httpOnly: true,
+
         secure:
           process.env.NODE_ENV ===
           "production",
+
         sameSite: "lax",
+
         maxAge:
           60 * 60 * 24 * 365,
+
         path: "/",
       }
     );
@@ -884,12 +980,16 @@ export async function POST(req) {
         userId,
         {
           httpOnly: true,
+
           secure:
             process.env.NODE_ENV ===
             "production",
+
           sameSite: "lax",
+
           maxAge:
             60 * 60 * 24 * 365,
+
           path: "/",
         }
       );
