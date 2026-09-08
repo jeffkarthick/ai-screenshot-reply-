@@ -48,9 +48,7 @@ export default function Home() {
   useEffect(() => {
     async function initialize() {
       try {
-        const params = new URLSearchParams(
-          window.location.search
-        );
+        const params = new URLSearchParams(window.location.search);
 
         const ref = params.get("ref");
         const refType = params.get("type");
@@ -64,22 +62,18 @@ export default function Home() {
             const claimResponse = await fetch(
               `/api/referral/claim?ref=${encodeURIComponent(
                 ref
-              )}&type=${encodeURIComponent(
-                refType || ""
-              )}`,
+              )}&type=${encodeURIComponent(refType || "")}`,
               {
                 method: "GET",
                 cache: "no-store",
               }
             );
 
-            const claimData =
-              await claimResponse.json();
+            const claimData = await claimResponse.json();
 
             if (
               claimResponse.ok &&
-              typeof claimData.repliesRemaining ===
-                "number"
+              typeof claimData.repliesRemaining === "number"
             ) {
               setRepliesRemaining(
                 claimData.repliesRemaining
@@ -117,21 +111,16 @@ export default function Home() {
         // LOAD CURRENT BALANCE
         // --------------------------------------
 
-        const response = await fetch(
-          "/api/usage",
-          {
-            method: "GET",
-            cache: "no-store",
-          }
-        );
+        const response = await fetch("/api/usage", {
+          method: "GET",
+          cache: "no-store",
+        });
 
-        const data =
-          await response.json();
+        const data = await response.json();
 
         if (
           response.ok &&
-          typeof data.repliesRemaining ===
-            "number"
+          typeof data.repliesRemaining === "number"
         ) {
           setRepliesRemaining(
             data.repliesRemaining
@@ -166,42 +155,30 @@ export default function Home() {
     setToneCache({});
 
     if (!file.type.startsWith("image/")) {
-      setError(
-        "Please upload an image file."
-      );
+      setError("Please upload an image file.");
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      setError(
-        "Image must be smaller than 10MB."
-      );
+      setError("Image must be smaller than 10MB.");
       return;
     }
 
     try {
-      const base64 =
-        await fileToBase64(file);
+      const base64 = await fileToBase64(file);
 
       setImage(file);
       setImageBase64(base64);
 
-      const newSessionId =
-        crypto.randomUUID();
+      const newSessionId = crypto.randomUUID();
 
-      setUploadSessionId(
-        newSessionId
-      );
+      setUploadSessionId(newSessionId);
 
       if (preview) {
-        URL.revokeObjectURL(
-          preview
-        );
+        URL.revokeObjectURL(preview);
       }
 
-      setPreview(
-        URL.createObjectURL(file)
-      );
+      setPreview(URL.createObjectURL(file));
     } catch (err) {
       console.error(err);
 
@@ -212,8 +189,7 @@ export default function Home() {
   }
 
   function handleInput(event) {
-    const file =
-      event.target.files?.[0];
+    const file = event.target.files?.[0];
 
     handleFile(file);
 
@@ -226,9 +202,7 @@ export default function Home() {
 
   function removeImage() {
     if (preview) {
-      URL.revokeObjectURL(
-        preview
-      );
+      URL.revokeObjectURL(preview);
     }
 
     setImage(null);
@@ -254,12 +228,10 @@ export default function Home() {
 
   function showResults() {
     setTimeout(() => {
-      resultsRef.current?.scrollIntoView(
-        {
-          behavior: "smooth",
-          block: "start",
-        }
-      );
+      resultsRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
     }, 150);
   }
 
@@ -267,27 +239,19 @@ export default function Home() {
   // GENERATE REPLIES
   // ==========================================
 
-  async function generateReplies(
-    selectedTone = tone
-  ) {
+  async function generateReplies(selectedTone = tone) {
     if (!image || !imageBase64) {
-      setError(
-        "Please upload a screenshot first."
-      );
+      setError("Please upload a screenshot first.");
       return;
     }
 
     if (!uploadSessionId) {
-      setError(
-        "Please upload the screenshot again."
-      );
+      setError("Please upload the screenshot again.");
       return;
     }
 
     if (repliesRemaining === 0) {
-      setError(
-        "You've used all your free replies."
-      );
+      setError("You've used all your free replies.");
       return;
     }
 
@@ -301,16 +265,12 @@ export default function Home() {
 
     if (
       toneCache[selectedTone] &&
-      Array.isArray(
-        toneCache[selectedTone]
-      ) &&
+      Array.isArray(toneCache[selectedTone]) &&
       toneCache[selectedTone].length > 0
     ) {
       setTone(selectedTone);
 
-      setReplies(
-        toneCache[selectedTone]
-      );
+      setReplies(toneCache[selectedTone]);
 
       setError("");
 
@@ -335,26 +295,20 @@ export default function Home() {
       setReadyMessage("");
       setCopied(null);
 
-      const response =
-        await fetch(
-          "/api/generate",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-            body: JSON.stringify({
-              image: imageBase64,
-              mimeType: image.type,
-              tone: selectedTone,
-              uploadSessionId,
-            }),
-          }
-        );
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          image: imageBase64,
+          mimeType: image.type,
+          tone: selectedTone,
+          uploadSessionId,
+        }),
+      });
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
         console.error(
@@ -362,10 +316,7 @@ export default function Home() {
           data
         );
 
-        if (
-          data?.code ===
-          "NO_REPLIES_LEFT"
-        ) {
+        if (data?.code === "NO_REPLIES_LEFT") {
           setRepliesRemaining(0);
         }
 
@@ -377,27 +328,21 @@ export default function Home() {
 
       if (
         !data.replies ||
-        !Array.isArray(
-          data.replies
-        )
+        !Array.isArray(data.replies)
       ) {
         throw new Error(
           "AI returned an invalid response."
         );
       }
 
-      if (
-        data.replies.length ===
-        0
-      ) {
+      if (data.replies.length === 0) {
         throw new Error(
           "No replies were generated."
         );
       }
 
       if (
-        typeof data.repliesRemaining ===
-        "number"
+        typeof data.repliesRemaining === "number"
       ) {
         setRepliesRemaining(
           data.repliesRemaining
@@ -407,13 +352,10 @@ export default function Home() {
       setTone(selectedTone);
       setReplies(data.replies);
 
-      setToneCache(
-        (previous) => ({
-          ...previous,
-          [selectedTone]:
-            data.replies,
-        })
-      );
+      setToneCache((previous) => ({
+        ...previous,
+        [selectedTone]: data.replies,
+      }));
 
       setReadyMessage(
         `${selectedTone} replies are ready`
@@ -444,13 +386,9 @@ export default function Home() {
   // TONE CHANGE
   // ==========================================
 
-  async function handleToneChange(
-    newTone
-  ) {
+  async function handleToneChange(newTone) {
     if (!image || !imageBase64) {
-      setError(
-        "Please upload a screenshot first."
-      );
+      setError("Please upload a screenshot first.");
       return;
     }
 
@@ -459,23 +397,16 @@ export default function Home() {
     setError("");
     setTone(newTone);
 
-    await generateReplies(
-      newTone
-    );
+    await generateReplies(newTone);
   }
 
   // ==========================================
   // COPY
   // ==========================================
 
-  async function copyReply(
-    text,
-    index
-  ) {
+  async function copyReply(text, index) {
     try {
-      await navigator.clipboard.writeText(
-        text
-      );
+      await navigator.clipboard.writeText(text);
 
       setCopied(index);
 
@@ -483,9 +414,7 @@ export default function Home() {
         setCopied(null);
       }, 1500);
     } catch {
-      setError(
-        "Unable to copy the reply."
-      );
+      setError("Unable to copy the reply.");
     }
   }
 
@@ -493,87 +422,112 @@ export default function Home() {
   // SHARE MY REPLY
   // ==========================================
 
-  async function shareReply(
-    reply,
-    index
-  ) {
+  async function shareReply(reply, index) {
     try {
-      setSharing(
-        `reply-${index}`
-      );
-
+      setSharing(`reply-${index}`);
       setError("");
+      setShareMessage("");
 
       // Create referral code
-      const code =
-        await createReferralCode(
-          "reply"
-        );
+      const code = await createReferralCode("reply");
 
       const shareUrl =
         `${window.location.origin}/?ref=${encodeURIComponent(
           code
         )}&type=reply`;
 
-      // Short and friendly WhatsApp message
+      // IMPORTANT:
+      // URL exists ONLY inside shareText.
+      // Do not pass url: shareUrl separately.
       const shareText =
         `👀 One tap = 5 free replies for me. Do your thing 😎\n\n${shareUrl}`;
 
-      // Create attractive generated-reply image
-      const imageFile =
-        await createReplyShareCard({
+      // Try to create reply image
+      let imageFile = null;
+
+      try {
+        imageFile = await createReplyShareCard({
           reply,
           tone,
         });
+      } catch (imageError) {
+        console.error(
+          "Reply share image error:",
+          imageError
+        );
+      }
 
       const canShareFiles =
-        typeof navigator !==
-          "undefined" &&
-        navigator.share &&
-        navigator.canShare &&
+        typeof navigator !== "undefined" &&
+        typeof navigator.share === "function" &&
+        typeof navigator.canShare === "function" &&
         imageFile &&
         navigator.canShare({
           files: [imageFile],
         });
 
       // --------------------------------------
-      // IMAGE SHARE
+      // IMAGE + TEXT SHARE
       // --------------------------------------
 
       if (canShareFiles) {
-        await navigator.share({
-          files: [imageFile],
-          title: "ReplyAI",
-          text: shareText,
-        });
+        try {
+          await navigator.share({
+            files: [imageFile],
+            title: "ReplyAI",
+            text: shareText,
+          });
 
-        setShareMessage(
-          "Shared successfully!"
-        );
+          setShareMessage("Shared successfully!");
+          return;
+        } catch (shareError) {
+          if (shareError?.name === "AbortError") {
+            return;
+          }
+
+          console.error(
+            "Image share failed:",
+            shareError
+          );
+        }
       }
 
       // --------------------------------------
       // TEXT SHARE FALLBACK
       // --------------------------------------
 
-      else if (
-        navigator.share
+      if (
+        typeof navigator !== "undefined" &&
+        typeof navigator.share === "function"
       ) {
-        await navigator.share({
-          title: "ReplyAI",
-          text: shareText,
-        });
+        try {
+          await navigator.share({
+            title: "ReplyAI",
+            text: shareText,
+          });
 
-        setShareMessage(
-          "Shared successfully!"
-        );
+          setShareMessage("Shared successfully!");
+          return;
+        } catch (shareError) {
+          if (shareError?.name === "AbortError") {
+            return;
+          }
+
+          console.error(
+            "Text share failed:",
+            shareError
+          );
+        }
       }
 
       // --------------------------------------
       // CLIPBOARD FALLBACK
       // --------------------------------------
 
-      else {
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard
+      ) {
         await navigator.clipboard.writeText(
           shareText
         );
@@ -581,27 +535,30 @@ export default function Home() {
         setShareMessage(
           "Share text copied to clipboard."
         );
+
+        return;
       }
 
-      setTimeout(() => {
-        setShareMessage("");
-      }, 4000);
+      throw new Error(
+        "Sharing is not available on this device."
+      );
     } catch (err) {
-      if (
-        err?.name !==
-        "AbortError"
-      ) {
-        console.error(
-          "Share error:",
-          err
-        );
+      console.error(
+        "Share My Reply error:",
+        err
+      );
 
+      if (err?.name !== "AbortError") {
         setError(
           "Unable to share right now. Please try again."
         );
       }
     } finally {
       setSharing(null);
+
+      setTimeout(() => {
+        setShareMessage("");
+      }, 4000);
     }
   }
 
@@ -613,74 +570,104 @@ export default function Home() {
     try {
       setSharing("site");
       setError("");
+      setShareMessage("");
 
       // Create referral code
-      const code =
-        await createReferralCode(
-          "site"
-        );
+      const code = await createReferralCode("site");
 
       const shareUrl =
         `${window.location.origin}/?ref=${encodeURIComponent(
           code
         )}&type=site`;
 
-      // Short and friendly WhatsApp message
+      // IMPORTANT:
+      // URL exists ONLY inside shareText.
       const shareText =
         `👀 One tap = 5 free replies for me. Do your thing 😎\n\n${shareUrl}`;
 
-      // Load actual website promotional image
-      const imageFile =
-        await loadPromoImage();
+      // Try loading promo image
+      let imageFile = null;
+
+      try {
+        imageFile = await loadPromoImage();
+      } catch (imageError) {
+        console.error(
+          "Promo image error:",
+          imageError
+        );
+      }
 
       const canShareFiles =
-        typeof navigator !==
-          "undefined" &&
-        navigator.share &&
-        navigator.canShare &&
+        typeof navigator !== "undefined" &&
+        typeof navigator.share === "function" &&
+        typeof navigator.canShare === "function" &&
         imageFile &&
         navigator.canShare({
           files: [imageFile],
         });
 
       // --------------------------------------
-      // IMAGE SHARE
+      // IMAGE + TEXT SHARE
       // --------------------------------------
 
       if (canShareFiles) {
-        await navigator.share({
-          files: [imageFile],
-          title: "ReplyAI",
-          text: shareText,
-        });
+        try {
+          await navigator.share({
+            files: [imageFile],
+            title: "ReplyAI",
+            text: shareText,
+          });
 
-        setShareMessage(
-          "Shared successfully!"
-        );
+          setShareMessage("Shared successfully!");
+          return;
+        } catch (shareError) {
+          if (shareError?.name === "AbortError") {
+            return;
+          }
+
+          console.error(
+            "Promo image share failed:",
+            shareError
+          );
+        }
       }
 
       // --------------------------------------
       // TEXT SHARE FALLBACK
       // --------------------------------------
 
-      else if (
-        navigator.share
+      if (
+        typeof navigator !== "undefined" &&
+        typeof navigator.share === "function"
       ) {
-        await navigator.share({
-          title: "ReplyAI",
-          text: shareText,
-        });
+        try {
+          await navigator.share({
+            title: "ReplyAI",
+            text: shareText,
+          });
 
-        setShareMessage(
-          "Shared successfully!"
-        );
+          setShareMessage("Shared successfully!");
+          return;
+        } catch (shareError) {
+          if (shareError?.name === "AbortError") {
+            return;
+          }
+
+          console.error(
+            "Text share failed:",
+            shareError
+          );
+        }
       }
 
       // --------------------------------------
       // CLIPBOARD FALLBACK
       // --------------------------------------
 
-      else {
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard
+      ) {
         await navigator.clipboard.writeText(
           shareText
         );
@@ -688,27 +675,30 @@ export default function Home() {
         setShareMessage(
           "Share text copied to clipboard."
         );
+
+        return;
       }
 
-      setTimeout(() => {
-        setShareMessage("");
-      }, 4000);
+      throw new Error(
+        "Sharing is not available on this device."
+      );
     } catch (err) {
-      if (
-        err?.name !==
-        "AbortError"
-      ) {
-        console.error(
-          "Share ReplyAI error:",
-          err
-        );
+      console.error(
+        "Share ReplyAI error:",
+        err
+      );
 
+      if (err?.name !== "AbortError") {
         setError(
           "Unable to share right now. Please try again."
         );
       }
     } finally {
       setSharing(null);
+
+      setTimeout(() => {
+        setShareMessage("");
+      }, 4000);
     }
   }
 
@@ -719,9 +709,7 @@ export default function Home() {
   return (
     <main className="page">
 
-      {/* ======================================
-          NAVBAR
-      ====================================== */}
+      {/* NAVBAR */}
 
       <nav className="navbar">
         <div className="brand">
@@ -729,9 +717,7 @@ export default function Home() {
             R
           </div>
 
-          <span>
-            ReplyAI
-          </span>
+          <span>ReplyAI</span>
         </div>
 
         <button
@@ -739,9 +725,7 @@ export default function Home() {
           className="navButton"
           onClick={() =>
             document
-              .getElementById(
-                "how"
-              )
+              .getElementById("how")
               ?.scrollIntoView({
                 behavior: "smooth",
               })
@@ -751,9 +735,7 @@ export default function Home() {
         </button>
       </nav>
 
-      {/* ======================================
-          HERO
-      ====================================== */}
+      {/* HERO */}
 
       <section className="hero">
 
@@ -772,9 +754,7 @@ export default function Home() {
           replies in seconds.
         </p>
 
-        {/* ====================================
-            REPLY BALANCE
-        ==================================== */}
+        {/* REPLY BALANCE */}
 
         <div className="repliesCounter">
 
@@ -786,8 +766,7 @@ export default function Home() {
             <strong>
               {balanceLoading
                 ? "Checking..."
-                : repliesRemaining ===
-                  1
+                : repliesRemaining === 1
                 ? "1 reply left"
                 : `${repliesRemaining} replies left`}
             </strong>
@@ -799,29 +778,20 @@ export default function Home() {
 
         </div>
 
-        {/* ====================================
-            SHARE REPLYAI
-        ==================================== */}
+        {/* SHARE REPLYAI */}
 
         <button
           type="button"
           className="shareSiteButton"
-          onClick={
-            shareReplyAI
-          }
-          disabled={
-            sharing !== null
-          }
+          onClick={shareReplyAI}
+          disabled={sharing !== null}
         >
-          {sharing ===
-          "site"
+          {sharing === "site"
             ? "Preparing share..."
             : "📢 Share ReplyAI"}
         </button>
 
-        {/* ====================================
-            UPLOAD
-        ==================================== */}
+        {/* UPLOAD */}
 
         <div className="card">
 
@@ -832,9 +802,7 @@ export default function Home() {
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
-                onChange={
-                  handleInput
-                }
+                onChange={handleInput}
                 hidden
               />
 
@@ -870,9 +838,7 @@ export default function Home() {
 
                 <button
                   type="button"
-                  onClick={
-                    removeImage
-                  }
+                  onClick={removeImage}
                   className="removeButton"
                 >
                   Remove
@@ -887,13 +853,12 @@ export default function Home() {
               />
 
             </div>
+
           )}
 
         </div>
 
-        {/* ====================================
-            ERROR
-        ==================================== */}
+        {/* ERROR */}
 
         {error && (
           <div className="errorBox">
@@ -901,9 +866,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ====================================
-            SUCCESS
-        ==================================== */}
+        {/* SUCCESS */}
 
         {readyMessage && (
           <div className="successBox">
@@ -911,9 +874,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ====================================
-            SHARE MESSAGE
-        ==================================== */}
+        {/* SHARE MESSAGE */}
 
         {shareMessage && (
           <div className="shareSuccessBox">
@@ -921,9 +882,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ====================================
-            TONES
-        ==================================== */}
+        {/* TONES */}
 
         <div className="toneSection">
 
@@ -933,71 +892,59 @@ export default function Home() {
 
           <div className="toneGrid">
 
-            {tones.map(
-              (item) => (
+            {tones.map((item) => (
 
-                <button
-                  type="button"
-                  key={item.name}
-                  disabled={
-                    loading ||
-                    !image ||
-                    repliesRemaining ===
-                      0
-                  }
-                  onClick={() =>
-                    handleToneChange(
-                      item.name
-                    )
-                  }
-                  className={`toneButton ${
-                    tone ===
-                    item.name
-                      ? "active"
-                      : ""
-                  }`}
-                >
+              <button
+                type="button"
+                key={item.name}
+                disabled={
+                  loading ||
+                  !image ||
+                  repliesRemaining === 0
+                }
+                onClick={() =>
+                  handleToneChange(item.name)
+                }
+                className={`toneButton ${
+                  tone === item.name
+                    ? "active"
+                    : ""
+                }`}
+              >
 
-                  <span>
-                    {item.emoji}
-                  </span>
+                <span>
+                  {item.emoji}
+                </span>
 
-                  {item.name}
+                {item.name}
 
-                </button>
+              </button>
 
-              )
-            )}
+            ))}
 
           </div>
+
         </div>
 
-        {/* ====================================
-            GENERATE
-        ==================================== */}
+        {/* GENERATE */}
 
         <button
           type="button"
           className="generateButton"
           onClick={() =>
-            generateReplies(
-              tone
-            )
+            generateReplies(tone)
           }
           disabled={
             loading ||
             !image ||
-            repliesRemaining ===
-              0
+            repliesRemaining === 0
           }
         >
 
           {loading ? (
             <>
               <span className="spinner"></span>
-
-              Understanding
-              screenshot...
+              Understanding screenshot...
             </>
           ) : (
             <>
@@ -1007,12 +954,9 @@ export default function Home() {
 
         </button>
 
-        {/* ====================================
-            NO REPLIES
-        ==================================== */}
+        {/* NO REPLIES */}
 
-        {repliesRemaining ===
-          0 && (
+        {repliesRemaining === 0 && (
 
           <div className="noRepliesBox">
 
@@ -1028,25 +972,19 @@ export default function Home() {
 
             <button
               type="button"
-              onClick={
-                shareReplyAI
-              }
-              disabled={
-                sharing !== null
-              }
+              onClick={shareReplyAI}
+              disabled={sharing !== null}
             >
               📢 Share ReplyAI
             </button>
 
           </div>
+
         )}
 
-        {/* ====================================
-            RESULTS
-        ==================================== */}
+        {/* RESULTS */}
 
-        {replies.length >
-          0 && (
+        {replies.length > 0 && (
 
           <section
             ref={resultsRef}
@@ -1072,17 +1010,12 @@ export default function Home() {
 
             </div>
 
-            {/* =================================
-                REPLY LIST
-            ================================= */}
+            {/* REPLY LIST */}
 
             <div className="replyList">
 
               {replies.map(
-                (
-                  reply,
-                  index
-                ) => (
+                (reply, index) => (
 
                   <div
                     className="replyCard"
@@ -1111,8 +1044,7 @@ export default function Home() {
                           )
                         }
                       >
-                        {copied ===
-                        index
+                        {copied === index
                           ? "✓ Copied"
                           : "📋 Copy"}
                       </button>
@@ -1129,8 +1061,7 @@ export default function Home() {
                           )
                         }
                         disabled={
-                          sharing !==
-                          null
+                          sharing !== null
                         }
                       >
                         {sharing ===
@@ -1148,9 +1079,7 @@ export default function Home() {
 
             </div>
 
-            {/* =================================
-                SHARE PROMO
-            ================================= */}
+            {/* SHARE PROMO */}
 
             <div className="sharePromo">
 
@@ -1176,9 +1105,7 @@ export default function Home() {
 
               <button
                 type="button"
-                onClick={
-                  shareReplyAI
-                }
+                onClick={shareReplyAI}
                 disabled={
                   sharing !== null
                 }
@@ -1189,13 +1116,12 @@ export default function Home() {
             </div>
 
           </section>
+
         )}
 
       </section>
 
-      {/* ======================================
-          HOW IT WORKS
-      ====================================== */}
+      {/* HOW IT WORKS */}
 
       <section
         id="how"
@@ -1266,9 +1192,7 @@ export default function Home() {
 
       </section>
 
-      {/* ======================================
-          FOOTER
-      ====================================== */}
+      {/* FOOTER */}
 
       <footer>
 
@@ -1332,33 +1256,25 @@ export default function Home() {
    CREATE REFERRAL CODE
 ========================================== */
 
-async function createReferralCode(
-  type
-) {
-  const response =
-    await fetch(
-      "/api/referral/create",
-      {
-        method: "POST",
+async function createReferralCode(type) {
+  const response = await fetch(
+    "/api/referral/create",
+    {
+      method: "POST",
 
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
+      headers: {
+        "Content-Type": "application/json",
+      },
 
-        body: JSON.stringify({
-          type,
-        }),
-      }
-    );
+      body: JSON.stringify({
+        type,
+      }),
+    }
+  );
 
-  const data =
-    await response.json();
+  const data = await response.json();
 
-  if (
-    !response.ok ||
-    !data.code
-  ) {
+  if (!response.ok || !data.code) {
     throw new Error(
       "Unable to create referral link."
     );
@@ -1393,28 +1309,9 @@ async function loadPromoImage() {
 
   return new File(
     [blob],
-    "replyai-share.png", 
+    "replyai-share.png",
     {
       type: blob.type || "image/png",
-    }
-  );
-}
-  if (!response.ok) {
-    throw new Error(
-      "Unable to load ReplyAI promo image."
-    );
-  }
-
-  const blob =
-    await response.blob();
-
-  return new File(
-    [blob],
-    "replyai-promo.png",
-    {
-      type:
-        blob.type ||
-        "image/png",
     }
   );
 }
@@ -1427,26 +1324,16 @@ async function createReplyShareCard({
   reply,
   tone,
 }) {
-  if (
-    typeof document ===
-    "undefined"
-  ) {
+  if (typeof document === "undefined") {
     return null;
   }
 
-  const canvas =
-    document.createElement(
-      "canvas"
-    );
+  const canvas = document.createElement("canvas");
 
-  // Mobile / WhatsApp friendly portrait
   canvas.width = 1080;
   canvas.height = 1350;
 
-  const ctx =
-    canvas.getContext(
-      "2d"
-    );
+  const ctx = canvas.getContext("2d");
 
   if (!ctx) {
     return null;
@@ -1456,13 +1343,12 @@ async function createReplyShareCard({
      PREMIUM BACKGROUND
   ======================================== */
 
-  const gradient =
-    ctx.createLinearGradient(
-      0,
-      0,
-      1080,
-      1350
-    );
+  const gradient = ctx.createLinearGradient(
+    0,
+    0,
+    1080,
+    1350
+  );
 
   gradient.addColorStop(
     0,
@@ -1479,8 +1365,7 @@ async function createReplyShareCard({
     "#d92e65"
   );
 
-  ctx.fillStyle =
-    gradient;
+  ctx.fillStyle = gradient;
 
   ctx.fillRect(
     0,
@@ -1521,14 +1406,11 @@ async function createReplyShareCard({
      BRAND
   ======================================== */
 
-  ctx.textAlign =
-    "left";
+  ctx.textAlign = "left";
 
-  ctx.fillStyle =
-    "#ffffff";
+  ctx.fillStyle = "#ffffff";
 
-  ctx.font =
-    "700 44px Arial";
+  ctx.font = "700 44px Arial";
 
   ctx.fillText(
     "ReplyAI",
@@ -1562,8 +1444,7 @@ async function createReplyShareCard({
   };
 
   const emoji =
-    toneEmoji[tone] ||
-    "✨";
+    toneEmoji[tone] || "✨";
 
   ctx.fillStyle =
     "rgba(255,255,255,0.15)";
@@ -1834,15 +1715,14 @@ async function createReplyShareCard({
      CREATE PNG
   ======================================== */
 
-  const blob =
-    await new Promise(
-      (resolve) =>
-        canvas.toBlob(
-          resolve,
-          "image/png",
-          1
-        )
-    );
+  const blob = await new Promise(
+    (resolve) =>
+      canvas.toBlob(
+        resolve,
+        "image/png",
+        1
+      )
+  );
 
   if (!blob) {
     return null;
@@ -1990,9 +1870,7 @@ function drawWrappedText(
   maxLines
 ) {
   const words =
-    String(text).split(
-      /\s+/
-    );
+    String(text).split(/\s+/);
 
   let line = "";
   let lineCount = 0;
@@ -2013,8 +1891,7 @@ function drawWrappedText(
       );
 
     if (
-      metrics.width >
-        maxWidth &&
+      metrics.width > maxWidth &&
       line
     ) {
       ctx.fillText(
@@ -2026,27 +1903,22 @@ function drawWrappedText(
       lineCount++;
 
       if (
-        lineCount >=
-        maxLines
+        lineCount >= maxLines
       ) {
         return;
       }
 
-      line =
-        words[i];
+      line = words[i];
 
-      y +=
-        lineHeight;
+      y += lineHeight;
     } else {
-      line =
-        testLine;
+      line = testLine;
     }
   }
 
   if (
     line &&
-    lineCount <
-      maxLines
+    lineCount < maxLines
   ) {
     ctx.fillText(
       line,
@@ -2060,65 +1932,56 @@ function drawWrappedText(
    FILE → BASE64
 ========================================== */
 
-function fileToBase64(
-  file
-) {
+function fileToBase64(file) {
   return new Promise(
     (resolve, reject) => {
       const reader =
         new FileReader();
 
-      reader.onload =
-        () => {
-          const result =
-            reader.result;
+      reader.onload = () => {
+        const result =
+          reader.result;
 
-          if (
-            typeof result !==
-            "string"
-          ) {
-            reject(
-              new Error(
-                "Unable to read image."
-              )
-            );
-
-            return;
-          }
-
-          const parts =
-            result.split(",");
-
-          if (
-            parts.length <
-            2
-          ) {
-            reject(
-              new Error(
-                "Invalid image data."
-              )
-            );
-
-            return;
-          }
-
-          resolve(
-            parts[1]
-          );
-        };
-
-      reader.onerror =
-        () => {
+        if (
+          typeof result !==
+          "string"
+        ) {
           reject(
             new Error(
               "Unable to read image."
             )
           );
-        };
 
-      reader.readAsDataURL(
-        file
-      );
+          return;
+        }
+
+        const parts =
+          result.split(",");
+
+        if (
+          parts.length < 2
+        ) {
+          reject(
+            new Error(
+              "Invalid image data."
+            )
+          );
+
+          return;
+        }
+
+        resolve(parts[1]);
+      };
+
+      reader.onerror = () => {
+        reject(
+          new Error(
+            "Unable to read image."
+          )
+        );
+      };
+
+      reader.readAsDataURL(file);
     }
   );
 }
