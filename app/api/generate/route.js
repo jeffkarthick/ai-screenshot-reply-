@@ -1016,57 +1016,113 @@ export async function POST(req) {
       return response;
     }
 
-    /*
-     * ========================================================
-     * READ AI RESPONSE
-     * ========================================================
-     */
+  /*
+ * ========================================================
+ * READ AI RESPONSE
+ * ========================================================
+ */
 
-    const text =
-      finalData
-        ?.candidates?.[0]
-        ?.content?.parts?.[0]
-        ?.text;
+const parts =
+  finalData
+    ?.candidates?.[0]
+    ?.content?.parts;
 
-    if (!text) {
-      return NextResponse.json(
-        {
-          error:
-            "AI returned an empty response. Please try again.",
-        },
-        {
-          status: 500,
-        }
+const text = Array.isArray(parts)
+  ? parts
+      .filter(
+        (part) =>
+          typeof part?.text === "string"
+      )
+      .map(
+        (part) =>
+          part.text
+      )
+      .join("")
+      .trim()
+  : "";
+
+if (!text) {
+  console.error(
+    "Gemini returned no usable text."
+  );
+
+  return NextResponse.json(
+    {
+      error:
+        "AI returned an empty response. Please try again.",
+    },
+    {
+      status: 500,
+    }
+  );
+}
+
+/*
+ * ========================================================
+ * PARSE JSON
+ * ========================================================
+ */
+
+let parsed;
+
+try {
+  /*
+   * First try direct JSON.
+   */
+  parsed = JSON.parse(text);
+} catch {
+  /*
+   * Gemini may occasionally wrap JSON
+   * inside markdown or add small extra text.
+   *
+   * Extract the JSON object safely.
+   */
+  try {
+    const start =
+      text.indexOf("{");
+
+    const end =
+      text.lastIndexOf("}");
+
+    if (
+      start === -1 ||
+      end === -1 ||
+      end <= start
+    ) {
+      throw new Error(
+        "No JSON object found."
       );
     }
 
+    const jsonText =
+      text.slice(
+        start,
+        end + 1
+      );
+
+    parsed =
+      JSON.parse(jsonText);
+  } catch (parseError) {
     /*
-     * ========================================================
-     * PARSE JSON
-     * ========================================================
+     * Do not expose Gemini's raw response
+     * to the public client.
      */
+    console.error(
+      "Gemini JSON parsing failed:",
+      parseError?.message || parseError
+    );
 
-    let parsed;
-
-    try {
-      parsed =
-        JSON.parse(text);
-    } catch (error) {
-      console.error(
-        "Invalid Gemini JSON:",
-        text
-      );
-
-      return NextResponse.json(
-        {
-          error:
-            "AI returned an invalid response. Please try again.",
-        },
-        {
-          status: 500,
-        }
-      );
-    }
+    return NextResponse.json(
+      {
+        error:
+          "AI returned an invalid response. Please try again.",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
 
     /*
      * ========================================================
