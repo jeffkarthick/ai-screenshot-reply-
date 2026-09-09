@@ -30,7 +30,7 @@ export default function ContactPage() {
           </p>
 
           <a
-            href="mailto:YOUR-EMAIL@example.com"
+            href="mailto:futureai.support@gmail.com"
             className="contactButton"
           >
             Email ReplyAI
