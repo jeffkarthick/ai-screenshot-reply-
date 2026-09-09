@@ -19,6 +19,7 @@ export default function Home() {
   const [replies, setReplies] = useState([]);
 
   const [loading, setLoading] = useState(false);
+  const [analysisStep, setAnalysisStep] = useState(0);
   const [error, setError] = useState("");
 
   const [copied, setCopied] = useState(null);
@@ -174,6 +175,20 @@ export default function Home() {
 
     initialize();
   }, []);
+  useEffect(() => {
+  if (!loading) {
+    setAnalysisStep(0);
+    return;
+  }
+
+  const interval = setInterval(() => {
+    setAnalysisStep((prev) =>
+      Math.min(prev + 1, 5)
+    );
+  }, 4500);
+
+  return () => clearInterval(interval);
+}, [loading]);
 
   // ==========================================
   // HANDLE FILE
@@ -1023,7 +1038,42 @@ export default function Home() {
             {error}
           </div>
         )}
+{/* AI THINKING */}
 
+{loading && (
+  <div className="aiThinkingBox">
+
+    <div className="thinkingIcon">
+      ✨
+    </div>
+
+    <h3>
+      ReplyAI is thinking...
+    </h3>
+
+    <p className="thinkingStatus">
+      {[
+        "🔍 Reading your screenshot...",
+        "🧠 Understanding the conversation...",
+        "💬 Picking up the conversation vibe...",
+        "✨ Creating natural replies...",
+        "🎯 Making the replies feel right...",
+        "🚀 Almost ready...",
+      ][analysisStep]}
+    </p>
+
+    <div className="thinkingDots">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+
+    <small>
+      This may take a few seconds. We're making your replies feel natural.
+    </small>
+
+  </div>
+)}
         {/* SUCCESS */}
 
         {readyMessage && (
