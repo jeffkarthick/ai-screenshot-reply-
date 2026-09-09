@@ -14,10 +14,40 @@ const MODELS = [
 const STARTING_REPLIES = 5;
 
 /*
- * Keep this reasonably short.
- * The screenshot itself contains the conversation,
- * so we don't need a huge instruction prompt.
+ * ============================================================
+ * SECURITY SETTINGS
+ * ============================================================
  */
+
+/*
+ * Maximum screenshot size:
+ * Base64 is larger than the original image,
+ * so 8 MB base64 allows normal phone screenshots
+ * while blocking extremely large payloads.
+ */
+const MAX_IMAGE_BASE64_LENGTH = 8 * 1024 * 1024;
+
+/*
+ * Maximum API requests from one IP in one minute.
+ *
+ * This protects Gemini from automated spam.
+ */
+const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_WINDOW = 60;
+
+/*
+ * Keep screenshot fingerprints for 90 days.
+ * This prevents the same screenshot from being charged
+ * repeatedly while avoiding unlimited Redis growth.
+ */
+const SCREENSHOT_USAGE_TTL = 60 * 60 * 24 * 90;
+
+/*
+ * ============================================================
+ * PROMPT
+ * ============================================================
+ */
+
 function buildPrompt(tone) {
   return `
 You are ReplyAI, an expert messaging reply assistant.
@@ -74,6 +104,12 @@ FORMAT:
 `;
 }
 
+/*
+ * ============================================================
+ * USER / REDIS KEYS
+ * ============================================================
+ */
+
 function createUserId() {
   return crypto.randomUUID();
 }
@@ -94,12 +130,89 @@ function getScreenshotUsageKey(userId, fingerprint) {
   return `replyai:used:${userId}:${fingerprint}`;
 }
 
-function createScreenshotFingerprint(image) {
+function getRateLimitKey(ipHash) {
+  return `replyai:ratelimit:${ipHash}`;
+}
+
+/*
+ * ============================================================
+ * IP HASH
+ *
+ * We don't store the raw IP address in Redis.
+ * ============================================================
+ */
+
+function getClientIp(req) {
+  const forwardedFor =
+    req.headers.get("x-forwarded-for");
+
+  if (forwardedFor) {
+    return forwardedFor.split(",")[0].trim();
+  }
+
+  const realIp =
+    req.headers.get("x-real-ip");
+
+  if (realIp) {
+    return realIp.trim();
+  }
+
+  return "unknown";
+}
+
+function hashIp(ip) {
   return crypto
     .createHash("sha256")
-    .update(image)
+    .update(ip)
     .digest("hex");
 }
+
+/*
+ * ============================================================
+ * RATE LIMIT
+ *
+ * Atomic Redis operation.
+ *
+ * Result:
+ * > RATE_LIMIT_MAX = blocked
+ * otherwise allowed
+ * ============================================================
+ */
+
+async function checkRateLimit(ipHash) {
+  const key = getRateLimitKey(ipHash);
+
+  const script = `
+    local count = redis.call(
+      "INCR",
+      KEYS[1]
+    )
+
+    if count == 1 then
+      redis.call(
+        "EXPIRE",
+        KEYS[1],
+        ARGV[1]
+      )
+    end
+
+    return count
+  `;
+
+  const count = await redis.eval(
+    script,
+    [key],
+    [String(RATE_LIMIT_WINDOW)]
+  );
+
+  return Number(count);
+}
+
+/*
+ * ============================================================
+ * BASE64 CLEANING
+ * ============================================================
+ */
 
 function cleanBase64Image(image) {
   if (!image || typeof image !== "string") {
@@ -112,6 +225,53 @@ function cleanBase64Image(image) {
 
   return image;
 }
+
+/*
+ * ============================================================
+ * BASE64 VALIDATION
+ * ============================================================
+ */
+
+function isValidBase64Image(image) {
+  if (!image || typeof image !== "string") {
+    return false;
+  }
+
+  /*
+   * Base64 should only contain valid characters.
+   */
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(image)) {
+    return false;
+  }
+
+  /*
+   * Base64 length should be divisible by 4.
+   */
+  if (image.length % 4 !== 0) {
+    return false;
+  }
+
+  return true;
+}
+
+/*
+ * ============================================================
+ * SCREENSHOT FINGERPRINT
+ * ============================================================
+ */
+
+function createScreenshotFingerprint(image) {
+  return crypto
+    .createHash("sha256")
+    .update(image)
+    .digest("hex");
+}
+
+/*
+ * ============================================================
+ * TEMPORARY ERROR DETECTION
+ * ============================================================
+ */
 
 function isTemporaryError(status, errorText = "") {
   const text = errorText.toLowerCase();
@@ -138,6 +298,8 @@ function isTemporaryError(status, errorText = "") {
  * > 0  = screenshot consumed one reply
  *   0  = no replies remaining
  *  -1  = screenshot already used
+ *
+ * Screenshot usage key gets a 90-day TTL.
  * ============================================================
  */
 
@@ -175,7 +337,9 @@ async function consumeReplyOnce(
     redis.call(
       "SET",
       KEYS[2],
-      "1"
+      "1",
+      "EX",
+      ARGV[1]
     )
 
     return newRemaining
@@ -187,21 +351,15 @@ async function consumeReplyOnce(
       repliesKey,
       screenshotUsageKey,
     ],
-    []
+    [
+      String(SCREENSHOT_USAGE_TTL),
+    ]
   );
 }
 
 /*
  * ============================================================
  * GEMINI REQUEST
- *
- * Optimizations:
- *
- * 1. No unnecessary 900ms retry delay
- * 2. One attempt per model
- * 3. Low thinking for Gemini 3.x
- * 4. Small output limit
- * 5. Request timeout
  * ============================================================
  */
 
@@ -224,15 +382,8 @@ async function generateWithGemini(
       responseMimeType:
         "application/json",
 
-      /*
-       * Reply suggestions are short.
-       * 300 tokens is more than enough.
-       */
       maxOutputTokens: 300,
 
-      /*
-       * Keep your existing creative behavior.
-       */
       temperature: 0.8,
     };
 
@@ -240,8 +391,7 @@ async function generateWithGemini(
      * Gemini 3.x:
      * Lower thinking = lower latency.
      *
-     * Gemini 2.5 does NOT support thinkingLevel,
-     * so only add it for Gemini 3.x.
+     * Gemini 2.5 does not receive this setting.
      */
     if (
       model.startsWith("gemini-3.")
@@ -261,6 +411,10 @@ async function generateWithGemini(
             "Content-Type":
               "application/json",
 
+            /*
+             * IMPORTANT:
+             * API key stays server-side.
+             */
             "x-goog-api-key":
               process.env
                 .GEMINI_API_KEY,
@@ -301,11 +455,13 @@ async function generateWithGemini(
 
       return {
         success: false,
+
         temporary:
           isTemporaryError(
             response.status,
             errorText
           ),
+
         error:
           errorText ||
           `Gemini returned ${response.status}`,
@@ -337,10 +493,80 @@ async function generateWithGemini(
   }
 }
 
+/*
+ * ============================================================
+ * POST
+ * ============================================================
+ */
+
 export async function POST(req) {
   let userId = null;
 
   try {
+    /*
+     * ========================================================
+     * RATE LIMIT
+     * ========================================================
+     */
+
+    const clientIp =
+      getClientIp(req);
+
+    const ipHash =
+      hashIp(clientIp);
+
+    let requestCount;
+
+    try {
+      requestCount =
+        await checkRateLimit(
+          ipHash
+        );
+    } catch (rateLimitError) {
+      /*
+       * If Redis rate-limit operation itself fails,
+       * don't expose internal error details.
+       *
+       * Continue normally because the main Redis
+       * usage system still protects the user.
+       */
+      console.error(
+        "Rate limit error:",
+        rateLimitError
+      );
+
+      requestCount = 0;
+    }
+
+    if (
+      requestCount >
+      RATE_LIMIT_MAX
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Too many requests. Please wait a moment and try again.",
+          code:
+            "RATE_LIMITED",
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After":
+              String(
+                RATE_LIMIT_WINDOW
+              ),
+          },
+        }
+      );
+    }
+
+    /*
+     * ========================================================
+     * READ REQUEST
+     * ========================================================
+     */
+
     const body =
       await req.json();
 
@@ -356,7 +582,10 @@ export async function POST(req) {
      * ========================================================
      */
 
-    if (!image) {
+    if (
+      !image ||
+      typeof image !== "string"
+    ) {
       return NextResponse.json(
         {
           error:
@@ -367,6 +596,30 @@ export async function POST(req) {
         }
       );
     }
+
+    /*
+     * Prevent extremely large image payloads.
+     */
+    if (
+      image.length >
+      MAX_IMAGE_BASE64_LENGTH
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Screenshot is too large. Please upload a smaller image.",
+        },
+        {
+          status: 413,
+        }
+      );
+    }
+
+    /*
+     * ========================================================
+     * GEMINI CONFIG CHECK
+     * ========================================================
+     */
 
     if (
       !process.env.GEMINI_API_KEY
@@ -393,9 +646,22 @@ export async function POST(req) {
         "replyai_user_id"
       )?.value;
 
-    userId =
-      existingUserId ||
-      createUserId();
+    /*
+     * Only accept a reasonably-sized UUID-like cookie.
+     * This avoids storing arbitrary huge values as Redis keys.
+     */
+    if (
+      existingUserId &&
+      existingUserId.length >
+        100
+    ) {
+      userId =
+        createUserId();
+    } else {
+      userId =
+        existingUserId ||
+        createUserId();
+    }
 
     const userKey =
       getUserKey(userId);
@@ -430,10 +696,6 @@ export async function POST(req) {
           new Date().toISOString(),
       };
 
-      /*
-       * These two Redis operations can run
-       * at the same time.
-       */
       await Promise.all([
         redis.set(
           userKey,
@@ -563,8 +825,11 @@ export async function POST(req) {
     ];
 
     const finalMimeType =
-      mimeType ||
-      "image/jpeg";
+      typeof mimeType ===
+        "string" &&
+      mimeType.length <= 100
+        ? mimeType
+        : "image/jpeg";
 
     if (
       !allowedMimeTypes.includes(
@@ -582,6 +847,10 @@ export async function POST(req) {
       );
     }
 
+    /*
+     * Clean data URL if frontend sends:
+     * data:image/png;base64,...
+     */
     const cleanImage =
       cleanBase64Image(image);
 
@@ -593,6 +862,43 @@ export async function POST(req) {
         },
         {
           status: 400,
+        }
+      );
+    }
+
+    /*
+     * Validate base64.
+     */
+    if (
+      !isValidBase64Image(
+        cleanImage
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid screenshot data.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+     * Re-check cleaned image size.
+     */
+    if (
+      cleanImage.length >
+      MAX_IMAGE_BASE64_LENGTH
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Screenshot is too large. Please upload a smaller image.",
+        },
+        {
+          status: 413,
         }
       );
     }
@@ -618,11 +924,8 @@ export async function POST(req) {
      * ========================================================
      * GEMINI
      *
-     * IMPORTANT:
-     * Model versions are unchanged.
-     *
-     * We simply try each model once.
-     * No unnecessary 900ms wait.
+     * Existing model order is preserved.
+     * One attempt per model.
      * ========================================================
      */
 
@@ -663,9 +966,7 @@ export async function POST(req) {
       );
 
       /*
-       * Immediately try the next model.
-       *
-       * No artificial 900ms delay.
+       * Immediately try next model.
        */
       continue;
     }
@@ -822,7 +1123,6 @@ export async function POST(req) {
      * Same screenshot:
      * do NOT charge again.
      */
-
     if (
       Number(
         usageResult
@@ -839,7 +1139,6 @@ export async function POST(req) {
     /*
      * No replies available.
      */
-
     else if (
       Number(
         usageResult
@@ -887,17 +1186,12 @@ export async function POST(req) {
      * First successful generation
      * for this screenshot.
      */
-
     else {
       repliesRemaining =
         Number(
           usageResult
         );
 
-      /*
-       * These two Redis operations
-       * are independent, so run together.
-       */
       await Promise.all([
         redis.incr(
           totalGeneratedKey
@@ -958,6 +1252,10 @@ export async function POST(req) {
     return response;
 
   } catch (error) {
+    /*
+     * Never expose internal server errors
+     * to the public client.
+     */
     console.error(
       "ReplyAI generate error:",
       error
