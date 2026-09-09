@@ -1970,3 +1970,112 @@ footer > p {
     padding: 0 8px !important;
   }
 }
+/* ==========================================
+   AI THINKING LOADER
+========================================== */
+
+.aiThinkingBox {
+  margin-top: 20px;
+  padding: 30px 24px;
+  background: #ffffff;
+  border: 1px solid #eeeeee;
+  border-radius: 22px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+  animation: thinkingFadeIn 0.35s ease;
+}
+
+.thinkingIcon {
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #fff0f5;
+  font-size: 28px;
+  animation: thinkingPulse 1.5s ease-in-out infinite;
+}
+
+.aiThinkingBox h3 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.thinkingStatus {
+  margin: 12px 0 16px;
+  font-size: 15px;
+  font-weight: 600;
+  min-height: 22px;
+}
+
+.thinkingDots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.thinkingDots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #a91d48;
+  animation: thinkingDot 1.2s infinite ease-in-out;
+}
+
+.thinkingDots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.thinkingDots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.aiThinkingBox small {
+  display: block;
+  color: #777777;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@keyframes thinkingPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.08);
+    opacity: 0.75;
+  }
+}
+
+@keyframes thinkingDot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
+@keyframes thinkingFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
