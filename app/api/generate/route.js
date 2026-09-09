@@ -469,12 +469,17 @@ async function generateWithGemini(
     }
 
     const data =
-      await response.json();
+  await response.json();
 
-    return {
-      success: true,
-      data,
-    };
+console.log(
+  "REPLYAI GEMINI SUCCESS RAW:",
+  JSON.stringify(data, null, 2)
+);
+
+return {
+  success: true,
+  data,
+};
   } catch (error) {
     const message =
       error?.name ===
